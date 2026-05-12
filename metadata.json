@@ -1,7 +1,0 @@
-{
-  "name": "Copy of 에코스캔 (EcoScan) - 스마트 분리수거 도우미",
-  "description": "카메라로 물건을 촬영하면 AI가 즉시 분리배출 방법과 카테고리를 알려주는 스마트 분리수거 가이드입니다.",
-  "requestFramePermissions": [
-    "camera"
-  ]
-}
