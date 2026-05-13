@@ -1,13 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { CheckCircle, XCircle, BookOpen, RotateCcw, Save } from 'lucide-react';
-import PageHeader from '../components/ui/PageHeader';
 import Button from '../components/ui/Button';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import InfoBox from '../components/ui/InfoBox';
 import { addHistory } from '../services/storage';
 import { analyzeImage, getRecyclingGuide } from '../services/api';
-import { RecyclingResult, WasteInfo } from '../types';
+import { RecyclingResult } from '../types';
 
 export default function Result() {
   const navigate = useNavigate();
@@ -16,16 +15,28 @@ export default function Result() {
     image?: string;
     searchText?: string;
     region: { sido: string; sigungu: string };
+    cachedResult?: RecyclingResult;
   };
 
   const [phase, setPhase] = useState<'analyzing' | 'loading' | 'done' | 'error'>('analyzing');
   const [itemName, setItemName] = useState('');
+  const [markCategory, setMarkCategory] = useState<string | null>(null);
+  const [markMaterial, setMarkMaterial] = useState<string | null>(null);
+  const [markTexts, setMarkTexts] = useState<string[]>([]);
   const [result, setResult] = useState<RecyclingResult | null>(null);
-  const [wasteInfo, setWasteInfo] = useState<WasteInfo | null>(null);
   const [saved, setSaved] = useState(false);
+  const ranRef = useRef(false);
 
   useEffect(() => {
+    if (ranRef.current) return;
+    ranRef.current = true;
     if (!state?.region) { navigate('/'); return; }
+    if (state.cachedResult) {
+      setResult(state.cachedResult);
+      setItemName(state.cachedResult.itemName);
+      setPhase('done');
+      return;
+    }
     run();
   }, []);
 
@@ -33,26 +44,25 @@ export default function Result() {
     try {
       const { image, searchText, region } = state;
 
-      // 이미지면 품목 추정 (백엔드 OpenCV + EXAONE)
       let name = searchText || '';
       if (image) {
         setPhase('analyzing');
-        name = await analyzeImage(image);
+        const mark = await analyzeImage(image);
+        setMarkCategory(mark.category);
+        setMarkMaterial(mark.material);
+        setMarkTexts(mark.texts ?? []);
+        name = mark.category
+          ? (mark.material ? `${mark.category} (${mark.material})` : mark.category)
+          : (mark.texts[0] || '알 수 없음');
       }
       setItemName(name);
 
-      // 분리수거 가이드 조회 (백엔드 EXAONE + 지역 JSON)
       setPhase('loading');
       const guide = await getRecyclingGuide(name, region.sido, region.sigungu);
       setResult(guide);
-
-      // 지역 배출정보는 백엔드 응답에서 추출
-      if (guide.wasteInfo) {
-        setWasteInfo(guide.wasteInfo as unknown as WasteInfo);
-      }
-
       setPhase('done');
-    } catch {
+    } catch (e) {
+      console.error('[Result] run() 오류:', e);
       setPhase('error');
     }
   };
@@ -72,7 +82,7 @@ export default function Result() {
   };
 
   if (phase === 'analyzing') {
-    return <LoadingSpinner message="이미지를 분석하여 품목을 추정하고 있어요" subMessage="잠시만 기다려주세요..." />;
+    return <LoadingSpinner message="라벨을 분석하고 있어요" subMessage="잠시만 기다려주세요..." />;
   }
 
   if (phase === 'loading') {
@@ -95,11 +105,26 @@ export default function Result() {
 
   return (
     <div className="flex flex-col gap-4 pb-4">
-      {/* 품목 */}
+      {/* 라벨 분석 결과 */}
       <InfoBox variant="default">
-        <p className="text-xs text-slate-400 mb-1">추정 품목</p>
-        <p className="text-2xl font-bold text-slate-800">{result.itemName}</p>
-        <p className="text-sm text-slate-500 mt-1">{result.category}</p>
+        <p className="text-xs text-slate-400 mb-2">라벨 분석 결과</p>
+        {markTexts.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {markTexts.map((t, i) => (
+              <span key={i} className="bg-slate-100 text-slate-700 text-sm font-medium px-3 py-1 rounded-full">
+                {t}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="text-slate-500 text-sm">인식된 텍스트가 없어요</p>
+        )}
+        {markCategory && (
+          <p className="text-xs text-slate-400 mt-2">
+            분류: <span className="text-emerald-600 font-medium">{markCategory}</span>
+            {markMaterial && <span className="ml-1">· {markMaterial}</span>}
+          </p>
+        )}
       </InfoBox>
 
       {/* 재활용 여부 */}
@@ -118,7 +143,7 @@ export default function Result() {
       {/* 배출 단계 */}
       <InfoBox title="배출 방법">
         <ol className="flex flex-col gap-2">
-          {result.disposalSteps.map((step, i) => (
+          {(result.disposalSteps ?? []).map((step, i) => (
             <li key={i} className="flex items-start gap-3">
               <span className="bg-emerald-100 text-emerald-700 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shrink-0 mt-0.5">
                 {i + 1}
@@ -130,10 +155,10 @@ export default function Result() {
       </InfoBox>
 
       {/* 주의사항 */}
-      {result.tips.length > 0 && (
+      {(result.tips ?? []).length > 0 && (
         <InfoBox variant="warning" title="주의사항">
           <ul className="flex flex-col gap-1.5">
-            {result.tips.map((tip, i) => (
+            {(result.tips ?? []).map((tip, i) => (
               <li key={i} className="text-sm flex items-start gap-2">
                 <span className="mt-1 shrink-0">•</span>{tip}
               </li>

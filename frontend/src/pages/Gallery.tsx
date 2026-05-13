@@ -34,7 +34,13 @@ export default function Gallery() {
       <PageHeader title="내 스캔 기록" />
       <div className="flex flex-col gap-3">
         {history.map(item => (
-          <div key={item.id} className="bg-white rounded-2xl border border-slate-200 p-4 flex items-center gap-3">
+          <div key={item.id} className="bg-white rounded-2xl border border-slate-200 p-4 flex items-center gap-3 cursor-pointer active:bg-slate-50"
+            onClick={() => navigate('/result', { state: {
+              searchText: item.searchText || item.itemName,
+              region: { sido: item.region.split(' ')[0], sigungu: item.region.split(' ')[1] || '' },
+              cachedResult: item.result,
+            }})}
+          >
             {item.image ? (
               <img src={item.image} alt={item.itemName} className="w-16 h-16 rounded-xl object-cover shrink-0 bg-slate-100" />
             ) : (
