@@ -20,9 +20,16 @@ export interface WasteInfoSimple {
   시군구명: string;
 }
 
+export interface MarkResult {
+  category: string | null;
+  material: string | null;
+  texts: string[];
+}
+
 export interface RecyclingResult {
   itemName: string;
   category: string;
+  markResult?: MarkResult;
   isRecyclable: boolean;
   disposalSteps: string[];
   tips: string[];

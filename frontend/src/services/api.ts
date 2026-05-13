@@ -1,4 +1,4 @@
-import { RecyclingResult } from '../types';
+import { RecyclingResult, MarkResult } from '../types';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
@@ -12,10 +12,9 @@ async function post<T>(path: string, body: object): Promise<T> {
   return res.json();
 }
 
-// 이미지 → 품목 추정
-export async function analyzeImage(image: string): Promise<string> {
-  const data = await post<{ itemName: string }>('/api/analyze-image', { image });
-  return data.itemName;
+// 이미지 → 라벨 분석 결과
+export async function analyzeImage(image: string): Promise<MarkResult> {
+  return post<MarkResult>('/api/analyze-image', { image });
 }
 
 // 품목 + 지역 → 분리수거 가이드
