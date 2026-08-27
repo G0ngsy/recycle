@@ -53,3 +53,12 @@ export interface ScanState {
   region?: { sido: string; sigungu: string };
   wasteInfo?: WasteInfo;
 }
+
+export interface RegionListResponse {
+  regions: string[];
+}
+
+export interface SigunguListResponse {
+  sido: string;
+  sigungu: string[];
+}

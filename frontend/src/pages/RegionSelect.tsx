@@ -1,56 +1,115 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { MapPin, ChevronRight } from 'lucide-react';
+import { AlertCircle, MapPin, ChevronRight } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import Button from '../components/ui/Button';
-
-const SIDO = '경기도';
-
-const SIGUNGU_LIST = [
-  '가평군', '고양시', '과천시', '광명시', '광주시', '구리시', '군포시',
-  '김포시', '남양주', '동두천', '부천시', '성남시', '수원시', '시흥시',
-  '안산시', '안성시', '안양시', '양주시', '양평군', '여주시', '연천군',
-  '오산시', '용인시', '의왕시', '의정부시', '이천시', '파주시', '평택시',
-  '포천시', '하남시', '화성시',
-];
+import { getRegions, getSigungu } from '../services/api';
 
 export default function RegionSelect() {
   const navigate = useNavigate();
   const location = useLocation();
   const prevState = (location.state as { image?: string; searchText?: string }) || {};
-
+  const [sido, setSido] = useState('');
   const [sigungu, setSigungu] = useState('');
+  const [regions, setRegions] = useState<string[]>([]);
+  const [sigunguList, setSigunguList] = useState<string[]>([]);
+  const [loadingRegions, setLoadingRegions] = useState(true);
+  const [loadingSigungu, setLoadingSigungu] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    setLoadingRegions(true);
+    getRegions()
+      .then(({ regions: loadedRegions }) => {
+        if (active) setRegions(loadedRegions);
+      })
+      .catch(() => {
+        if (active) setError('지역 목록을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
+      })
+      .finally(() => {
+        if (active) setLoadingRegions(false);
+      });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!sido) {
+      setSigunguList([]);
+      setLoadingSigungu(false);
+      return;
+    }
+    let active = true;
+    setLoadingSigungu(true);
+    getSigungu(sido)
+      .then(({ sigungu: loadedSigungu }) => {
+        if (active) setSigunguList(loadedSigungu);
+      })
+      .catch(() => {
+        if (active) setError('시·군·구 목록을 불러오지 못했습니다. 다시 시도해주세요.');
+      })
+      .finally(() => {
+        if (active) setLoadingSigungu(false);
+      });
+    return () => { active = false; };
+  }, [sido]);
+
+  const handleSidoChange = (nextSido: string) => {
+    setSido(nextSido);
+    setSigungu('');
+    setError('');
+  };
+
+  const handleRetry = () => window.location.reload();
 
   const handleNext = () => {
+    if (!sido) return;
     navigate('/result', {
-      state: { ...prevState, region: { sido: SIDO, sigungu } },
+      state: { ...prevState, region: { sido, sigungu } },
     });
   };
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="지역 선택" subtitle="시군구를 선택해주세요" />
+      <PageHeader title="지역 선택" subtitle="시·도를 선택하고, 더 정확한 안내가 필요하면 시·군·구를 선택해주세요" />
+
+      {error && (
+        <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <AlertCircle size={18} className="shrink-0" />
+          <span className="flex-1">{error}</span>
+          <button type="button" onClick={handleRetry} className="font-medium underline">재시도</button>
+        </div>
+      )}
 
       <div className="flex flex-col gap-3">
-        <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
+        <label className="flex items-center gap-3 bg-white border border-slate-300 rounded-xl px-4 py-3 focus-within:border-emerald-400 transition-colors">
           <MapPin size={20} className="text-emerald-500 shrink-0" />
-          <span className="text-emerald-700 font-medium">{SIDO}</span>
-        </div>
+          <select
+            value={sido}
+            onChange={e => handleSidoChange(e.target.value)}
+            disabled={loadingRegions}
+            className="flex-1 outline-none text-slate-800 bg-transparent disabled:text-slate-400"
+          >
+            <option value="">{loadingRegions ? '시·도 목록을 불러오는 중...' : '시·도 선택'}</option>
+            {regions.map(region => <option key={region} value={region}>{region}</option>)}
+          </select>
+        </label>
 
-        <div className="flex items-center gap-3 bg-white border border-slate-300 rounded-xl px-4 py-3 focus-within:border-emerald-400 transition-colors">
+        <label className="flex items-center gap-3 bg-white border border-slate-300 rounded-xl px-4 py-3 focus-within:border-emerald-400 transition-colors">
           <MapPin size={20} className="text-slate-400 shrink-0" />
           <select
             value={sigungu}
             onChange={e => setSigungu(e.target.value)}
-            className="flex-1 outline-none text-slate-800 bg-transparent"
+            disabled={!sido || loadingSigungu}
+            className="flex-1 outline-none text-slate-800 bg-transparent disabled:text-slate-400"
           >
-            <option value="">시/군 선택</option>
-            {SIGUNGU_LIST.map(s => <option key={s} value={s}>{s}</option>)}
+            <option value="">{loadingSigungu ? '시·군·구 목록을 불러오는 중...' : '시·군·구 선택 (선택 사항)'}</option>
+            {sigunguList.map(item => <option key={item} value={item}>{item}</option>)}
           </select>
-        </div>
+        </label>
       </div>
 
-      <Button fullWidth disabled={!sigungu} icon={<ChevronRight size={20} />} onClick={handleNext}>
+      <Button fullWidth disabled={!sido || loadingRegions || loadingSigungu} icon={<ChevronRight size={20} />} onClick={handleNext}>
         확인
       </Button>
     </div>

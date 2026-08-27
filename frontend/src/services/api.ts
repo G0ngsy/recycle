@@ -1,4 +1,4 @@
-import { RecyclingResult, MarkResult } from '../types';
+import { RecyclingResult, MarkResult, RegionListResponse, SigunguListResponse } from '../types';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
@@ -10,6 +10,20 @@ async function post<T>(path: string, body: object): Promise<T> {
   });
   if (!res.ok) throw new Error(`API 오류: ${res.status}`);
   return res.json();
+}
+
+async function get<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`);
+  if (!res.ok) throw new Error(`API 오류: ${res.status}`);
+  return res.json();
+}
+
+export function getRegions(): Promise<RegionListResponse> {
+  return get<RegionListResponse>('/api/regions');
+}
+
+export function getSigungu(sido: string): Promise<SigunguListResponse> {
+  return get<SigunguListResponse>(`/api/regions/${encodeURIComponent(sido)}/sigungu`);
 }
 
 // 이미지 → 라벨 분석 결과

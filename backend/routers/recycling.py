@@ -22,15 +22,37 @@ class GuideRequest(BaseModel):
 
 
 def load_waste_info(sido: str, sigungu: str) -> dict | None:
-    path = DATA_DIR / f"{sido}.json"
-    if not path.exists():
+    data = load_region_data(sido)
+    if data is None:
         return None
-    with open(path, encoding="utf-8") as f:
-        data = json.load(f)
     if sigungu:
         item = next((d for d in data if d.get("시군구명") == sigungu), None)
         return item or (data[0] if data else None)
     return data[0] if data else None
+
+
+def load_region_data(sido: str) -> list[dict] | None:
+    path = DATA_DIR / f"{sido}.json"
+    if not path.exists():
+        return None
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+@router.get("/regions")
+async def list_regions():
+    """Return every supported 시·도, based on the backend's canonical data files."""
+    return {"regions": sorted(path.stem for path in DATA_DIR.glob("*.json"))}
+
+
+@router.get("/regions/{sido}/sigungu")
+async def list_sigungu(sido: str):
+    """Return the unique 시·군·구 values available for one 시·도."""
+    data = load_region_data(sido)
+    if data is None:
+        raise HTTPException(status_code=404, detail="지원하지 않는 시·도입니다.")
+    sigungu = sorted({row.get("시군구명", "").strip() for row in data if row.get("시군구명", "").strip()})
+    return {"sido": sido, "sigungu": sigungu}
 
 
 @router.post("/analyze-image")
