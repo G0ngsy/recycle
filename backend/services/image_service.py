@@ -1,10 +1,10 @@
 import base64
+import os
 import re
 from pathlib import Path
 
 import numpy as np
 import cv2
-from ultralytics import YOLO
 import easyocr
 
 _yolo = None
@@ -55,6 +55,8 @@ RECYCLE_MARK_MAP = {
 def _get_yolo():
     global _yolo
     if _yolo is None:
+        from ultralytics import YOLO
+
         _yolo = YOLO(str(YOLO_MODEL_PATH))
     return _yolo
 
@@ -62,7 +64,13 @@ def _get_yolo():
 def _get_ocr():
     global _ocr
     if _ocr is None:
-        _ocr = easyocr.Reader(["ko", "en"], gpu=True, verbose=False)
+        use_gpu = os.getenv("EASYOCR_GPU", "false").lower() in {"1", "true", "yes"}
+        model_dir = os.getenv("EASYOCR_MODEL_DIR")
+        download_enabled = os.getenv("EASYOCR_DOWNLOAD_ENABLED", "true").lower() in {"1", "true", "yes"}
+        options = {"gpu": use_gpu, "verbose": False, "download_enabled": download_enabled}
+        if model_dir:
+            options["model_storage_directory"] = model_dir
+        _ocr = easyocr.Reader(["ko", "en"], **options)
     return _ocr
 
 
@@ -154,7 +162,7 @@ def detect_recycle_mark(base64_image: str) -> dict:
             if key in text:
                 val = RECYCLE_MARK_MAP.get(key)
                 if val:
-                    category, _ = val
+                    category, material = val
                     break
         if category:
             break

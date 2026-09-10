@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Recycle, ImageIcon, History } from 'lucide-react';
+import { Recycle, History } from 'lucide-react';
 
 export default function Header() {
   const navigate = useNavigate();

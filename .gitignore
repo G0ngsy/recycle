@@ -21,6 +21,7 @@ backend/__pycache__/
 backend/**/__pycache__/
 *.pyc
 backend/.env
+backend/test-results/
 
 # Editor directories and files
 .vscode/*

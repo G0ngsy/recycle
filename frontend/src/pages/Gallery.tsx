@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Trash2, CheckCircle, XCircle, ImageIcon } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
@@ -8,13 +8,11 @@ import { HistoryItem } from '../types';
 
 export default function Gallery() {
   const navigate = useNavigate();
-  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [history, setHistory] = useState<HistoryItem[]>(loadHistory);
 
-  useEffect(() => { setHistory(loadHistory()); }, []);
-
-  const handleDelete = (id: string) => {
-    deleteHistory(id);
-    setHistory(prev => prev.filter(h => h.id !== id));
+  const handleDelete = (event: React.MouseEvent, id: string) => {
+    event.stopPropagation();
+    if (deleteHistory(id)) setHistory(prev => prev.filter(h => h.id !== id));
   };
 
   if (history.length === 0) {
@@ -37,7 +35,11 @@ export default function Gallery() {
           <div key={item.id} className="bg-white rounded-2xl border border-slate-200 p-4 flex items-center gap-3 cursor-pointer active:bg-slate-50"
             onClick={() => navigate('/result', { state: {
               searchText: item.searchText || item.itemName,
-              region: { sido: item.region.split(' ')[0], sigungu: item.region.split(' ')[1] || '' },
+              region: item.regionInfo ?? {
+                sido: item.region.split(' ')[0],
+                sigungu: item.region.split(' ')[1] || '',
+                managementArea: item.region.split(' ')[2] || '',
+              },
               cachedResult: item.result,
             }})}
           >
@@ -61,7 +63,7 @@ export default function Gallery() {
             <Button
               variant="danger"
               className="!p-2 !rounded-lg"
-              onClick={() => handleDelete(item.id)}
+              onClick={event => handleDelete(event, item.id)}
             >
               <Trash2 size={18} />
             </Button>

@@ -1,18 +1,20 @@
 import os
 import json
-import ollama
-from huggingface_hub import InferenceClient
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def _source_label(waste_info: dict | None) -> str:
+    if not waste_info:
+        return "분리수거 AI 기본 안내"
+    region = " ".join(
+        part for part in (waste_info.get("시도명", ""), waste_info.get("시군구명", "")) if part
+    )
+    return f"공공데이터 기반 지역 배출 정보 ({region or '지역 미상'})"
 
 
 def _fallback_guide(item_name: str, waste_info: dict | None, reason: str = "") -> dict:
-    source_parts = ["AI 응답 파싱 실패 시 기본 안내"]
-    if waste_info:
-        region = f"{waste_info.get('시도명', '')} {waste_info.get('시군구명', '')}".strip()
-        if region:
-            source_parts.append(region)
-    if reason:
-        source_parts.append(reason)
-
     return {
         "itemName": item_name or "알 수 없음",
         "category": "확인 필요",
@@ -25,7 +27,7 @@ def _fallback_guide(item_name: str, waste_info: dict | None, reason: str = "") -
         "tips": [
             "오염이 심하거나 재질이 불명확하면 일반쓰레기 또는 지자체 안내를 확인하세요.",
         ],
-        "source": " / ".join(source_parts),
+        "source": _source_label(waste_info),
     }
 
 
@@ -37,33 +39,47 @@ def _normalize_guide(result: dict, item_name: str, waste_info: dict | None) -> d
     normalized = {**fallback, **result}
     normalized["itemName"] = str(normalized.get("itemName") or item_name or "알 수 없음")
     normalized["category"] = str(normalized.get("category") or fallback["category"])
-    normalized["isRecyclable"] = bool(normalized.get("isRecyclable"))
+    recyclable = normalized.get("isRecyclable")
+    if isinstance(recyclable, str) and recyclable.lower() in {"true", "false"}:
+        recyclable = recyclable.lower() == "true"
+    if not isinstance(recyclable, bool):
+        return fallback
+    normalized["isRecyclable"] = recyclable
 
     for key in ("disposalSteps", "tips"):
         value = normalized.get(key)
         if isinstance(value, str):
             normalized[key] = [value]
-        elif not isinstance(value, list):
+        elif not isinstance(value, list) or not all(isinstance(entry, str) for entry in value):
             normalized[key] = fallback[key]
 
-    normalized["source"] = str(normalized.get("source") or fallback["source"])
+    # Source is application-owned metadata; never trust a model-generated citation.
+    normalized["source"] = _source_label(waste_info)
     return normalized
 
 
 def _get_response(prompt: str) -> str:
     use_ollama = os.getenv("USE_OLLAMA", "true").lower() == "true"
+    timeout = float(os.getenv("AI_TIMEOUT_SECONDS", "20"))
 
     if use_ollama:
+        import ollama
+
         model = os.getenv("OLLAMA_MODEL", "exaone3.5")
-        response = ollama.chat(
+        client = ollama.Client(timeout=timeout)
+        response = client.chat(
             model=model,
             messages=[{"role": "user", "content": prompt}],
         )
         return response["message"]["content"]
     else:
+        from huggingface_hub import InferenceClient
+
         token = os.getenv("HF_API_TOKEN")
+        if not token:
+            raise RuntimeError("HF_API_TOKEN is required when USE_OLLAMA=false")
         model = os.getenv("HF_MODEL", "LGAI-EXAONE/EXAONE-3.5-7.8B-Instruct")
-        client = InferenceClient(token=token)
+        client = InferenceClient(token=token, timeout=timeout)
         response = client.chat_completion(
             model=model,
             messages=[{"role": "user", "content": prompt}],
@@ -130,17 +146,16 @@ def get_recycling_guide(item_name: str, waste_info: dict | None, graph_context: 
   "category": "분류 (플라스틱/종이/유리/금속/일반쓰레기/음식물/특수폐기물 중 하나)",
   "isRecyclable": true 또는 false,
   "disposalSteps": ["배출 단계 1", "배출 단계 2", "배출 단계 3"],
-  "tips": ["주의사항 1", "주의사항 2"],
-  "source": "근거 출처 (지식 그래프 + 지역 데이터 기반)"
+  "tips": ["주의사항 1", "주의사항 2"]
 }}"""
 
     try:
         raw = _get_response(prompt)
-    except Exception as e:
-        print(f"[ERROR] AI 호출 실패: {type(e).__name__}: {e}")
+    except Exception as error:
+        logger.warning("AI provider call failed: %s", type(error).__name__)
         return _fallback_guide(item_name, waste_info, "AI 호출 실패")
 
-    print("[DEBUG] EXAONE raw:", raw[:300])
+    logger.debug("AI response received (%d characters)", len(raw))
     # JSON 블록 추출
     cleaned = raw.strip()
     if "```" in cleaned:
@@ -157,8 +172,8 @@ def get_recycling_guide(item_name: str, waste_info: dict | None, graph_context: 
         cleaned = cleaned[start:end]
     try:
         result = json.loads(cleaned)
-    except json.JSONDecodeError as e:
-        print(f"[ERROR] AI JSON 파싱 실패: {e}; raw={raw[:500]}")
+    except json.JSONDecodeError:
+        logger.warning("AI response was not valid JSON")
         return _fallback_guide(item_name, waste_info, "AI JSON 파싱 실패")
 
     # 최상위가 list면 첫 번째 요소 사용

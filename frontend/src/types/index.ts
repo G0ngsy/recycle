@@ -11,13 +11,19 @@ export interface WasteInfo {
   재활용품배출종료시각: string;
 }
 
+export interface DisposalRule {
+  disposalDays: string;
+  startTime: string;
+  endTime: string;
+  place: string;
+  method: string;
+}
+
 export interface WasteInfoSimple {
-  배출요일: string;
-  배출시작시각: string;
-  배출종료시각: string;
-  배출장소: string;
-  시도명: string;
-  시군구명: string;
+  sido: string;
+  sigungu: string;
+  managementArea?: string | null;
+  rules: DisposalRule[];
 }
 
 export interface MarkResult {
@@ -43,6 +49,7 @@ export interface HistoryItem {
   searchText?: string;
   itemName: string;
   region: string;
+  regionInfo?: { sido: string; sigungu: string; managementArea?: string };
   result: RecyclingResult;
   timestamp: number;
 }
@@ -50,7 +57,7 @@ export interface HistoryItem {
 export interface ScanState {
   image?: string;
   searchText?: string;
-  region?: { sido: string; sigungu: string };
+  region?: { sido: string; sigungu: string; managementArea?: string };
   wasteInfo?: WasteInfo;
 }
 
@@ -61,4 +68,11 @@ export interface RegionListResponse {
 export interface SigunguListResponse {
   sido: string;
   sigungu: string[];
+}
+
+export interface AreaListResponse {
+  sido: string;
+  sigungu: string;
+  areas: string[];
+  required: boolean;
 }

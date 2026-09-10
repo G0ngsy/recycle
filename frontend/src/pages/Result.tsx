@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { CheckCircle, XCircle, BookOpen, RotateCcw, Save } from 'lucide-react';
 import Button from '../components/ui/Button';
@@ -11,14 +11,16 @@ import { RecyclingResult } from '../types';
 export default function Result() {
   const navigate = useNavigate();
   const location = useLocation();
-  const state = location.state as {
-    image?: string;
-    searchText?: string;
-    region: { sido: string; sigungu: string };
-    cachedResult?: RecyclingResult;
-  };
+  const state = useMemo(() => (
+    (location.state as {
+      image?: string;
+      searchText?: string;
+      region?: { sido: string; sigungu: string; managementArea?: string };
+      cachedResult?: RecyclingResult;
+    } | null) ?? {}
+  ), [location.state]);
 
-  const [phase, setPhase] = useState<'analyzing' | 'loading' | 'done' | 'error'>('analyzing');
+  const [phase, setPhase] = useState<'analyzing' | 'confirm' | 'loading' | 'done' | 'error'>('analyzing');
   const [itemName, setItemName] = useState('');
   const [markCategory, setMarkCategory] = useState<string | null>(null);
   const [markMaterial, setMarkMaterial] = useState<string | null>(null);
@@ -27,22 +29,22 @@ export default function Result() {
   const [saved, setSaved] = useState(false);
   const ranRef = useRef(false);
 
-  useEffect(() => {
-    if (ranRef.current) return;
-    ranRef.current = true;
-    if (!state?.region) { navigate('/'); return; }
-    if (state.cachedResult) {
-      setResult(state.cachedResult);
-      setItemName(state.cachedResult.itemName);
-      setPhase('done');
-      return;
-    }
-    run();
-  }, []);
+  const requestGuide = useCallback(async (name: string) => {
+    if (!state.region) throw new Error('지역 정보가 없습니다.');
+    setPhase('loading');
+    const guide = await getRecyclingGuide(
+      name,
+      state.region.sido,
+      state.region.sigungu,
+      state.region.managementArea,
+    );
+    setResult(guide);
+    setPhase('done');
+  }, [state.region]);
 
-  const run = async () => {
+  const run = useCallback(async () => {
     try {
-      const { image, searchText, region } = state;
+      const { image, searchText } = state;
 
       let name = searchText || '';
       if (image) {
@@ -53,32 +55,62 @@ export default function Result() {
         setMarkTexts(mark.texts ?? []);
         name = mark.category
           ? (mark.material ? `${mark.category} (${mark.material})` : mark.category)
-          : (mark.texts[0] || '알 수 없음');
+          : (mark.texts[0] || '');
+        setItemName(name);
+        if (!mark.category) {
+          setPhase('confirm');
+          return;
+        }
       }
       setItemName(name);
-
-      setPhase('loading');
-      const guide = await getRecyclingGuide(name, region.sido, region.sigungu);
-      setResult(guide);
-      setPhase('done');
+      await requestGuide(name);
     } catch (e) {
       console.error('[Result] run() 오류:', e);
       setPhase('error');
     }
+  }, [requestGuide, state]);
+
+  const handleConfirmItem = async () => {
+    const name = itemName.trim();
+    if (!name) return;
+    try {
+      await requestGuide(name);
+    } catch (error) {
+      console.error('[Result] guide request error:', error);
+      setPhase('error');
+    }
   };
 
+  useEffect(() => {
+    if (ranRef.current) return;
+    ranRef.current = true;
+    if (!state?.region || (!state.image && !state.searchText && !state.cachedResult)) {
+      navigate('/', { replace: true });
+      return;
+    }
+    if (state.cachedResult) {
+      setResult(state.cachedResult);
+      setItemName(state.cachedResult.itemName);
+      setPhase('done');
+      return;
+    }
+    void run();
+  }, [navigate, run, state]);
+
   const handleSave = () => {
-    if (!result || saved) return;
-    addHistory({
+    if (!result || saved || !state.region) return;
+    const didSave = addHistory({
       id: Date.now().toString(),
       image: state.image,
       searchText: state.searchText,
       itemName,
-      region: `${state.region.sido} ${state.region.sigungu}`.trim(),
+      region: [state.region.sido, state.region.sigungu, state.region.managementArea].filter(Boolean).join(' '),
+      regionInfo: state.region,
       result,
       timestamp: Date.now(),
     });
-    setSaved(true);
+    if (didSave) setSaved(true);
+    else alert('브라우저 저장 공간이 부족해 기록을 저장하지 못했습니다.');
   };
 
   if (phase === 'analyzing') {
@@ -87,6 +119,34 @@ export default function Result() {
 
   if (phase === 'loading') {
     return <LoadingSpinner message="분리수거 방법을 찾고 있어요" subMessage="잠시만 기다려주세요..." />;
+  }
+
+  if (phase === 'confirm') {
+    return (
+      <div className="flex flex-col gap-5 pt-4">
+        <InfoBox variant="warning" title="라벨을 정확히 인식하지 못했어요">
+          <p className="text-sm">품목명을 확인하거나 직접 입력한 뒤 안내를 계속해주세요.</p>
+        </InfoBox>
+        {markTexts.length > 0 && (
+          <p className="text-sm text-slate-500">인식된 문자: {markTexts.join(', ')}</p>
+        )}
+        <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
+          품목명
+          <input
+            value={itemName}
+            onChange={event => setItemName(event.target.value)}
+            onKeyDown={event => event.key === 'Enter' && void handleConfirmItem()}
+            maxLength={100}
+            placeholder="예: 페트병, 종이컵"
+            className="rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none focus:border-emerald-400"
+            autoFocus
+          />
+        </label>
+        <Button fullWidth disabled={!itemName.trim()} onClick={() => void handleConfirmItem()}>
+          이 품목으로 확인
+        </Button>
+      </div>
+    );
   }
 
   if (phase === 'error') {
@@ -169,12 +229,26 @@ export default function Result() {
 
       {/* 지역 배출 정보 */}
       {result.wasteInfo && (
-        <InfoBox variant="info" title={`${result.wasteInfo.시도명} ${result.wasteInfo.시군구명} 배출 정보`}>
-          <ul className="flex flex-col gap-1.5 text-sm">
-            <li>📅 요일: {result.wasteInfo.배출요일}</li>
-            <li>⏰ 시간: {result.wasteInfo.배출시작시각} ~ {result.wasteInfo.배출종료시각}</li>
-            <li>📍 장소: {result.wasteInfo.배출장소}</li>
-          </ul>
+        <InfoBox
+          variant="info"
+          title={`${result.wasteInfo.sido} ${result.wasteInfo.sigungu} ${result.wasteInfo.managementArea ?? ''} 배출 정보`.replace(/\s+/g, ' ').trim()}
+        >
+          <div className="flex flex-col gap-3">
+            {result.wasteInfo.rules.map((rule, index) => (
+              <div key={`${rule.disposalDays}-${rule.startTime}-${rule.endTime}-${rule.place}-${index}`} className="rounded-xl border border-blue-200 bg-white/60 p-3">
+                {result.wasteInfo!.rules.length > 1 && <p className="mb-1 text-xs font-semibold text-blue-700">배출 규칙 {index + 1}</p>}
+                <ul className="flex flex-col gap-1 text-sm">
+                  <li>📅 요일: {rule.disposalDays || '정보 없음'}</li>
+                  <li>⏰ 시간: {rule.startTime || '정보 없음'} ~ {rule.endTime || '정보 없음'}</li>
+                  <li>📍 장소: {rule.place || '정보 없음'}</li>
+                  <li>♻️ 방법: {rule.method || '정보 없음'}</li>
+                </ul>
+              </div>
+            ))}
+            {result.wasteInfo.rules.length > 1 && (
+              <p className="text-xs text-blue-700">세부 주소에 따라 배출 규칙이 다를 수 있으니 관리기관 안내도 확인해주세요.</p>
+            )}
+          </div>
         </InfoBox>
       )}
 
