@@ -5,7 +5,7 @@ from huggingface_hub import InferenceClient
 
 
 def _fallback_guide(item_name: str, waste_info: dict | None, reason: str = "") -> dict:
-    source_parts = ["AI 응답 파싱 실패 시 기본 안내"]
+    source_parts = ["AI 안내를 확인할 수 없음"]
     if waste_info:
         region = f"{waste_info.get('시도명', '')} {waste_info.get('시군구명', '')}".strip()
         if region:
@@ -16,15 +16,10 @@ def _fallback_guide(item_name: str, waste_info: dict | None, reason: str = "") -
     return {
         "itemName": item_name or "알 수 없음",
         "category": "확인 필요",
-        "isRecyclable": False,
-        "disposalSteps": [
-            "품목의 재질 표시와 오염 여부를 먼저 확인하세요.",
-            "내용물을 비우고 가능한 경우 깨끗하게 헹구세요.",
-            "지역 배출 정보에 맞춰 지정된 장소에 배출하세요.",
-        ],
-        "tips": [
-            "오염이 심하거나 재질이 불명확하면 일반쓰레기 또는 지자체 안내를 확인하세요.",
-        ],
+        "guideStatus": "unavailable",
+        "isRecyclable": None,
+        "disposalSteps": [],
+        "tips": [],
         "source": " / ".join(source_parts),
     }
 
@@ -33,20 +28,22 @@ def _normalize_guide(result: dict, item_name: str, waste_info: dict | None) -> d
     fallback = _fallback_guide(item_name, waste_info)
     if not isinstance(result, dict):
         return fallback
+    if type(result.get("isRecyclable")) is not bool:
+        return _fallback_guide(item_name, waste_info, "AI 판정값 누락 또는 오류")
 
     normalized = {**fallback, **result}
     normalized["itemName"] = str(normalized.get("itemName") or item_name or "알 수 없음")
     normalized["category"] = str(normalized.get("category") or fallback["category"])
-    normalized["isRecyclable"] = bool(normalized.get("isRecyclable"))
+    normalized["guideStatus"] = "ready"
 
     for key in ("disposalSteps", "tips"):
         value = normalized.get(key)
         if isinstance(value, str):
             normalized[key] = [value]
         elif not isinstance(value, list):
-            normalized[key] = fallback[key]
+            normalized[key] = []
 
-    normalized["source"] = str(normalized.get("source") or fallback["source"])
+    normalized["source"] = str(result.get("source") or "AI 생성 안내")
     return normalized
 
 

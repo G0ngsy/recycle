@@ -48,13 +48,12 @@ def get_item_context(item_name: str) -> Optional[dict]:
     return None
 
 
-def get_region_context(sido: str, sigungu: str) -> Optional[dict]:
+def get_region_context(management_id: str) -> Optional[dict]:
     driver = _get_driver()
     if not driver:
         return None
     try:
         with driver.session() as session:
-            region_id = f"{sido}_{sigungu}" if sigungu else sido
             result = session.run(
                 """
                 MATCH (r:Region {id: $id})
@@ -64,35 +63,19 @@ def get_region_context(sido: str, sigungu: str) -> Optional[dict]:
                        r.recyclable_end AS end,
                        r.recycle_method AS method
                 """,
-                id=region_id,
+                id=management_id,
             )
             record = result.single()
             if record:
                 return dict(record)
-            # fallback: sido only
-            result2 = session.run(
-                """
-                MATCH (r:Region {sido: $sido})
-                RETURN r.disposal_place AS place,
-                       r.recyclable_days AS days,
-                       r.recyclable_start AS start,
-                       r.recyclable_end AS end,
-                       r.recycle_method AS method
-                LIMIT 1
-                """,
-                sido=sido,
-            )
-            record2 = result2.single()
-            if record2:
-                return dict(record2)
     except Exception:
         pass
     return None
 
 
-def build_graph_context(item_name: str, sido: str, sigungu: str) -> str:
+def build_graph_context(item_name: str, sido: str, sigungu: str, management_id: str | None = None) -> str:
     item_ctx = get_item_context(item_name)
-    region_ctx = get_region_context(sido, sigungu)
+    region_ctx = get_region_context(management_id) if management_id else None
 
     parts = []
     if item_ctx:

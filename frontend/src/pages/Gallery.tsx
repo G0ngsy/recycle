@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Trash2, CheckCircle, XCircle, ImageIcon } from 'lucide-react';
+import { Trash2, CheckCircle, XCircle, ImageIcon, CircleHelp } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import Button from '../components/ui/Button';
 import { loadHistory, deleteHistory } from '../services/storage';
@@ -34,13 +34,20 @@ export default function Gallery() {
       <PageHeader title="내 스캔 기록" />
       <div className="flex flex-col gap-3">
         {history.map(item => (
-          <div key={item.id} className="bg-white rounded-2xl border border-slate-200 p-4 flex items-center gap-3 cursor-pointer active:bg-slate-50"
-            onClick={() => navigate('/result', { state: {
-              searchText: item.searchText || item.itemName,
-              region: { sido: item.region.split(' ')[0], sigungu: item.region.split(' ')[1] || '' },
-              cachedResult: item.result,
-            }})}
-          >
+          <div key={item.id} className="bg-white rounded-2xl border border-slate-200 p-4 flex items-center gap-3">
+            <button type="button" className="flex items-center gap-3 flex-1 min-w-0 text-left rounded-xl active:bg-slate-50"
+              aria-label={`${item.itemName} 기록 열기`}
+              onClick={() => navigate('/result', { state: {
+                image: item.image,
+                searchText: item.searchText || item.itemName,
+                region: item.regionSelection || {
+                  sido: item.region.split(' ')[0],
+                  sigungu: item.region.split(' ')[1] || '',
+                  managementId: item.result.wasteInfo?.관리번호 || '',
+                },
+                cachedResult: item.result,
+              }})}
+            >
             {item.image ? (
               <img src={item.image} alt={item.itemName} className="w-16 h-16 rounded-xl object-cover shrink-0 bg-slate-100" />
             ) : (
@@ -52,15 +59,19 @@ export default function Gallery() {
               <p className="font-semibold text-slate-800 truncate">{item.itemName}</p>
               <p className="text-xs text-slate-400 mt-0.5">{item.region}</p>
               <div className="flex items-center gap-1 mt-1">
-                {item.result.isRecyclable
+                {item.result.guideStatus === 'unavailable'
+                  ? <><CircleHelp size={14} className="text-amber-500" /><span className="text-xs text-amber-700">확인 필요</span></>
+                  : item.result.isRecyclable
                   ? <><CheckCircle size={14} className="text-emerald-500" /><span className="text-xs text-emerald-600">재활용 가능</span></>
                   : <><XCircle size={14} className="text-red-400" /><span className="text-xs text-red-500">재활용 불가</span></>
                 }
               </div>
             </div>
+            </button>
             <Button
               variant="danger"
               className="!p-2 !rounded-lg"
+              aria-label={`${item.itemName} 기록 삭제`}
               onClick={() => handleDelete(item.id)}
             >
               <Trash2 size={18} />
