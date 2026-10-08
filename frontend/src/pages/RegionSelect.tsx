@@ -1,12 +1,20 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AlertCircle, ChevronRight, MapPin } from 'lucide-react';
 
 import Button from '../components/ui/Button';
 import PageHeader from '../components/ui/PageHeader';
-import { getManagementAreas, getRegions, getSigungu } from '../services/api';
+import { getRegions, getSigungu, getWasteRecords } from '../services/api';
+import type { WasteRecordOption } from '../types';
 
-type RequestKind = 'regions' | 'sigungu' | 'areas';
+const PAGE_SIZE = 30;
+type RequestKind = 'regions' | 'sigungu' | 'records';
+
+function recordLabel(record: WasteRecordOption): string {
+  return [record.관리구역명, record.관리구역대상지역명, record.배출장소유형, record.배출장소]
+    .filter(value => value && value !== '없음' && value !== '해당없음')
+    .join(' · ');
+}
 
 export default function RegionSelect() {
   const navigate = useNavigate();
@@ -17,170 +25,167 @@ export default function RegionSelect() {
   );
   const [sido, setSido] = useState('');
   const [sigungu, setSigungu] = useState('');
-  const [managementArea, setManagementArea] = useState('');
   const [regions, setRegions] = useState<string[]>([]);
   const [sigunguList, setSigunguList] = useState<string[]>([]);
-  const [areas, setAreas] = useState<string[]>([]);
-  const [areaRequired, setAreaRequired] = useState(false);
-  const [loading, setLoading] = useState<RequestKind | null>('regions');
+  const [searchText, setSearchText] = useState('');
+  const [query, setQuery] = useState('');
+  const [offset, setOffset] = useState(0);
+  const [records, setRecords] = useState<WasteRecordOption[]>([]);
+  const [total, setTotal] = useState(0);
+  const [selected, setSelected] = useState<WasteRecordOption | null>(null);
+  const [loadingRegions, setLoadingRegions] = useState(true);
+  const [loadingSigungu, setLoadingSigungu] = useState(false);
+  const [loadingRecords, setLoadingRecords] = useState(false);
   const [failedRequest, setFailedRequest] = useState<RequestKind | null>(null);
-  const [error, setError] = useState('');
-  const [retries, setRetries] = useState<Record<RequestKind, number>>({ regions: 0, sigungu: 0, areas: 0 });
-
-  const fail = (kind: RequestKind, message: string) => {
-    setFailedRequest(kind);
-    setError(message);
-  };
-
-  const loadRegions = useCallback(async () => {
-    setLoading('regions');
-    setError('');
-    try {
-      const response = await getRegions();
-      setRegions(response.regions);
-      setFailedRequest(null);
-    } catch {
-      fail('regions', '지역 목록을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
-    } finally {
-      setLoading(null);
-    }
-  }, []);
+  const [retries, setRetries] = useState<Record<RequestKind, number>>({ regions: 0, sigungu: 0, records: 0 });
 
   useEffect(() => {
     if (!prevState.image && !prevState.searchText) {
       navigate('/', { replace: true });
       return;
     }
-    void loadRegions();
-  }, [loadRegions, navigate, prevState.image, prevState.searchText, retries.regions]);
+    let active = true;
+    setLoadingRegions(true);
+    getRegions()
+      .then(({ regions: loaded }) => {
+        if (!active) return;
+        setRegions(loaded);
+        setFailedRequest(null);
+      })
+      .catch(() => { if (active) setFailedRequest('regions'); })
+      .finally(() => { if (active) setLoadingRegions(false); });
+    return () => { active = false; };
+  }, [navigate, prevState.image, prevState.searchText, retries.regions]);
 
   useEffect(() => {
-    if (!sido) return;
+    if (!sido) { setSigunguList([]); return; }
     let active = true;
-    setLoading('sigungu');
-    setError('');
+    setLoadingSigungu(true);
     getSigungu(sido)
-      .then(response => {
-        if (active) {
-          setSigunguList(response.sigungu);
-          setFailedRequest(null);
-        }
+      .then(({ sigungu: loaded }) => {
+        if (!active) return;
+        setSigunguList(loaded);
+        setFailedRequest(null);
       })
-      .catch(() => {
-        if (active) fail('sigungu', '시·군·구 목록을 불러오지 못했습니다.');
-      })
-      .finally(() => { if (active) setLoading(null); });
+      .catch(() => { if (active) setFailedRequest('sigungu'); })
+      .finally(() => { if (active) setLoadingSigungu(false); });
     return () => { active = false; };
   }, [sido, retries.sigungu]);
 
   useEffect(() => {
-    if (!sido || !sigungu) return;
+    const timer = window.setTimeout(() => {
+      setQuery(searchText.trim());
+      setOffset(0);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [searchText]);
+
+  useEffect(() => {
+    if (!sido || !sigungu || query !== searchText.trim()) return;
     let active = true;
-    setLoading('areas');
-    setError('');
-    getManagementAreas(sido, sigungu)
-      .then(response => {
-        if (active) {
-          setAreas(response.areas);
-          setAreaRequired(response.required);
-          setFailedRequest(null);
-        }
+    setLoadingRecords(true);
+    getWasteRecords(sido, sigungu, query, offset)
+      .then(({ total: count, records: loaded }) => {
+        if (!active) return;
+        setTotal(count);
+        setRecords(previous => offset === 0 ? loaded : [...previous, ...loaded]);
+        setFailedRequest(null);
+        if (!query && count === 1 && loaded[0]) setSelected(loaded[0]);
       })
-      .catch(() => {
-        if (active) fail('areas', '관리구역 목록을 불러오지 못했습니다.');
-      })
-      .finally(() => { if (active) setLoading(null); });
+      .catch(() => { if (active) setFailedRequest('records'); })
+      .finally(() => { if (active) setLoadingRecords(false); });
     return () => { active = false; };
-  }, [sido, sigungu, retries.areas]);
+  }, [sido, sigungu, query, offset, searchText, retries.records]);
 
-  const handleSidoChange = (value: string) => {
-    setLoading(value ? 'sigungu' : null);
+  const resetRecords = () => {
+    setSearchText('');
+    setQuery('');
+    setOffset(0);
+    setRecords([]);
+    setTotal(0);
+    setSelected(null);
+    setLoadingRecords(false);
     setFailedRequest(null);
-    setSido(value);
-    setSigungu('');
-    setManagementArea('');
-    setSigunguList([]);
-    setAreas([]);
-    setAreaRequired(false);
-    setError('');
-  };
-
-  const handleSigunguChange = (value: string) => {
-    setLoading(value ? 'areas' : null);
-    setFailedRequest(null);
-    setSigungu(value);
-    setManagementArea('');
-    setAreas([]);
-    setAreaRequired(false);
-    setError('');
   };
 
   const handleRetry = () => {
-    setError('');
-    if (failedRequest) {
-      setRetries(current => ({ ...current, [failedRequest]: current[failedRequest] + 1 }));
-    }
+    if (!failedRequest) return;
+    setRetries(current => ({ ...current, [failedRequest]: current[failedRequest] + 1 }));
   };
 
-  const isBusy = loading !== null;
-  const selectionIncomplete = !sido || isBusy || Boolean(error) || (areaRequired && !managementArea);
+  const isBusy = loadingRegions || loadingSigungu || loadingRecords;
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="지역 선택" subtitle="시·도, 시·군·구와 필요한 경우 관리구역을 선택해주세요" />
+      <PageHeader title="지역 선택" subtitle="시·군·구와 실제 배출 장소를 선택해주세요" />
 
-      {error && (
-        <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+      {failedRequest && (
+        <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
           <AlertCircle size={18} className="shrink-0" />
-          <span className="flex-1">{error}</span>
-          <button type="button" onClick={handleRetry} className="font-medium underline">
-            {failedRequest ? '재시도' : '다시 불러오기'}
-          </button>
+          <span className="flex-1">{failedRequest === 'regions' ? '지역 목록을' : failedRequest === 'sigungu' ? '시·군·구 목록을' : '배출장소 목록을'} 불러오지 못했습니다.</span>
+          <button type="button" onClick={handleRetry} className="font-medium underline">재시도</button>
         </div>
       )}
 
       <div className="flex flex-col gap-3">
-        <RegionSelectField iconClass="text-emerald-500">
-          <select value={sido} onChange={event => handleSidoChange(event.target.value)} disabled={loading === 'regions'} className="flex-1 outline-none bg-transparent disabled:text-slate-400">
-            <option value="">{loading === 'regions' ? '시·도 목록을 불러오는 중...' : '시·도 선택'}</option>
-            {regions.map(region => <option key={region}>{region}</option>)}
+        <label className="flex items-center gap-3 rounded-xl border border-slate-300 bg-white px-4 py-3 focus-within:border-emerald-400">
+          <MapPin size={20} className="text-emerald-500 shrink-0" />
+          <select aria-label="시·도" value={sido}
+            onChange={event => { setSido(event.target.value); setSigungu(''); setSigunguList([]); resetRecords(); }}
+            disabled={loadingRegions} className="flex-1 outline-none bg-transparent disabled:text-slate-400">
+            <option value="">{loadingRegions ? '시·도 목록을 불러오는 중...' : '시·도 선택'}</option>
+            {regions.map(region => <option key={region} value={region}>{region}</option>)}
           </select>
-        </RegionSelectField>
+        </label>
 
-        <RegionSelectField>
-          <select value={sigungu} onChange={event => handleSigunguChange(event.target.value)} disabled={!sido || loading === 'sigungu'} className="flex-1 outline-none bg-transparent disabled:text-slate-400">
-            <option value="">{loading === 'sigungu' ? '시·군·구 목록을 불러오는 중...' : '시·군·구 선택 (선택 사항)'}</option>
-            {sigunguList.map(item => <option key={item}>{item}</option>)}
+        <label className="flex items-center gap-3 rounded-xl border border-slate-300 bg-white px-4 py-3 focus-within:border-emerald-400">
+          <MapPin size={20} className="text-slate-400 shrink-0" />
+          <select aria-label="시·군·구" value={sigungu}
+            onChange={event => { setSigungu(event.target.value); resetRecords(); }}
+            disabled={!sido || loadingSigungu} className="flex-1 outline-none bg-transparent disabled:text-slate-400">
+            <option value="">{loadingSigungu ? '시·군·구 목록을 불러오는 중...' : '시·군·구 선택'}</option>
+            {sigunguList.map(item => <option key={item} value={item}>{item}</option>)}
           </select>
-        </RegionSelectField>
-
-        {sigungu && (loading === 'areas' || areaRequired) && (
-          <RegionSelectField>
-            <select value={managementArea} onChange={event => setManagementArea(event.target.value)} disabled={loading === 'areas'} className="flex-1 outline-none bg-transparent disabled:text-slate-400">
-              <option value="">{loading === 'areas' ? '관리구역 목록을 불러오는 중...' : '관리구역 선택'}</option>
-              {areas.map(area => <option key={area}>{area}</option>)}
-            </select>
-          </RegionSelectField>
-        )}
+        </label>
       </div>
 
-      <Button
-        fullWidth
-        disabled={selectionIncomplete}
+      {sigungu && (
+        <section className="flex flex-col gap-3" aria-label="세부 관리구역 또는 배출장소">
+          <label htmlFor="record-search" className="text-sm font-semibold text-slate-700">세부 관리구역 또는 배출장소</label>
+          <input id="record-search" type="search" value={searchText}
+            onChange={event => { setSearchText(event.target.value); setRecords([]); setSelected(null); setLoadingRecords(true); setFailedRequest(null); }}
+            placeholder="지역명이나 배출장소 검색"
+            className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-emerald-400" />
+          {selected && <p className="rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">선택됨: {recordLabel(selected)} · 관리번호 {selected.관리번호}</p>}
+          {loadingRecords ? <p className="text-sm text-slate-500">배출장소를 찾는 중...</p> : (
+            <>
+              <p className="text-xs text-slate-500">검색 결과 {total.toLocaleString()}건</p>
+              {total === 0 && <p className="text-sm text-slate-600">일치하는 장소가 없습니다. 검색어를 바꿔주세요.</p>}
+              {total > 0 && (total > 1 || !!query) && (
+                <div className="max-h-72 overflow-y-auto flex flex-col gap-2" role="group" aria-label="배출장소 검색 결과">
+                  {records.map(record => (
+                    <button key={record.관리번호} type="button" aria-pressed={selected?.관리번호 === record.관리번호}
+                      onClick={() => setSelected(record)}
+                      className={`rounded-xl border px-3 py-3 text-left text-sm ${selected?.관리번호 === record.관리번호 ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-white'}`}>
+                      <span className="block text-slate-800">{recordLabel(record) || '세부 위치 정보 없음'}</span>
+                      <span className="block mt-1 text-xs text-slate-500">관리번호 {record.관리번호}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {records.length < total && (
+                <button type="button" onClick={() => setOffset(previous => previous + PAGE_SIZE)} className="self-center text-sm font-medium text-emerald-700 underline">더 보기</button>
+              )}
+            </>
+          )}
+        </section>
+      )}
+
+      <Button fullWidth disabled={!sido || !sigungu || !selected || isBusy || !!failedRequest}
         icon={<ChevronRight size={20} />}
-        onClick={() => navigate('/result', { state: { ...prevState, region: { sido, sigungu, managementArea } } })}
-      >
+        onClick={() => navigate('/result', { state: { ...prevState, region: { sido, sigungu, managementId: selected!.관리번호 } } })}>
         확인
       </Button>
     </div>
-  );
-}
-
-function RegionSelectField({ children, iconClass = 'text-slate-400' }: { children: ReactNode; iconClass?: string }) {
-  return (
-    <label className="flex items-center gap-3 rounded-xl border border-slate-300 bg-white px-4 py-3 transition-colors focus-within:border-emerald-400">
-      <MapPin size={20} className={`${iconClass} shrink-0`} />
-      {children}
-    </label>
   );
 }

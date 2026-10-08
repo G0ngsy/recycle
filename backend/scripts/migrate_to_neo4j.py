@@ -1,5 +1,5 @@
 """
-Regional waste JSON → Neo4j Aura migration script.
+Management-number keyed waste records → Neo4j Aura migration script.
 Run once: python scripts/migrate_to_neo4j.py
 """
 import json
@@ -15,25 +15,13 @@ URI = os.getenv("NEO4J_URI")
 USER = os.getenv("NEO4J_USERNAME", os.getenv("NEO4J_USER", "neo4j"))
 PASSWORD = os.getenv("NEO4J_PASSWORD")
 
-DATA_DIR = Path(__file__).parent.parent / "data"
-
-SIDO_LIST = [
-    "서울특별시", "부산광역시", "대구광역시", "인천광역시", "광주광역시",
-    "대전광역시", "울산광역시", "세종특별자치시", "경기도", "강원도",
-    "충청북도", "충청남도", "전라북도", "전라남도", "경상북도", "경상남도", "제주특별자치도",
-]
+DATA_PATH = Path(__file__).parent.parent / "data" / "waste_records.json"
 
 
 def load_regional_data() -> list[dict]:
-    rows = []
-    for sido in SIDO_LIST:
-        path = DATA_DIR / f"{sido}.json"
-        if not path.exists():
-            continue
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-        rows.extend(data)
-    return rows
+    with DATA_PATH.open(encoding="utf-8") as source:
+        packed = json.load(source)
+    return [dict(zip(packed["fields"], values, strict=True)) for values in packed["records"]]
 
 
 def create_constraints(session):
@@ -43,35 +31,27 @@ def create_constraints(session):
 
 
 def migrate_regions(session, rows: list[dict]):
-    for row in rows:
-        sido = row.get("시도명", "").strip()
-        sigungu = row.get("시군구명", "").strip()
-        if not sido:
-            continue
-        region_id = f"{sido}_{sigungu}" if sigungu else sido
+    for start in range(0, len(rows), 250):
+        batch = rows[start:start + 250]
         session.run(
             """
-            MERGE (r:Region {id: $id})
-            SET r.sido = $sido,
-                r.sigungu = $sigungu,
-                r.disposal_place = $place,
-                r.recyclable_days = $days,
-                r.recyclable_start = $start,
-                r.recyclable_end = $end,
-                r.waste_method = $waste_method,
-                r.food_method = $food_method,
-                r.recycle_method = $recycle_method
+            UNWIND $rows AS row
+            MERGE (r:Region {id: row.`관리번호`})
+            SET r.sido = row.`시도명`,
+                r.sigungu = row.`시군구명`,
+                r.management_area = row.`관리구역명`,
+                r.target_area = row.`관리구역대상지역명`,
+                r.collection_type = row.`배출장소유형`,
+                r.disposal_place = row.`배출장소`,
+                r.recyclable_days = row.`재활용품배출요일`,
+                r.recyclable_start = row.`재활용품배출시작시각`,
+                r.recyclable_end = row.`재활용품배출종료시각`,
+                r.waste_method = row.`생활쓰레기배출방법`,
+                r.food_method = row.`음식물쓰레기배출방법`,
+                r.recycle_method = row.`재활용품배출방법`,
+                r.data_date = row.`데이터기준일자`
             """,
-            id=region_id,
-            sido=sido,
-            sigungu=sigungu,
-            place=row.get("배출장소", ""),
-            days=row.get("재활용품배출요일", ""),
-            start=row.get("재활용품배출시작시각", ""),
-            end=row.get("재활용품배출종료시각", ""),
-            waste_method=row.get("생활쓰레기배출방법", ""),
-            food_method=row.get("음식물쓰레기배출방법", ""),
-            recycle_method=row.get("재활용품배출방법", ""),
+            rows=batch,
         )
 
 

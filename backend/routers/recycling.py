@@ -1,18 +1,20 @@
 import base64
 import binascii
-import json
 import logging
 import os
-from pathlib import Path
+from typing import Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from services.ai_service import get_recycling_guide
+from services.waste_data import (
+    list_sido, list_sigungu as waste_sigungu, normalize_sido,
+    public_waste_info, region_records, resolve_record, search_records,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-DATA_DIR = Path(__file__).parent.parent / "data"
 ALLOWED_IMAGE_MIME_TYPES = {"image/jpeg", "image/png"}
 MAX_IMAGE_BYTES = int(os.getenv("MAX_IMAGE_BYTES", str(5 * 1024 * 1024)))
 
@@ -32,29 +34,31 @@ class GuideRequest(BaseModel):
     category: str = Field(default="", max_length=50)
     material: str = Field(default="", max_length=50)
     sido: str = Field(min_length=1, max_length=30)
-    sigungu: str = Field(default="", max_length=30)
-    managementArea: str = Field(default="", max_length=100)
-
-
-class DisposalRuleResponse(BaseModel):
-    disposalDays: str = ""
-    startTime: str = ""
-    endTime: str = ""
-    place: str = ""
-    method: str = ""
+    sigungu: str = Field(min_length=1, max_length=30)
+    managementId: str | None = Field(default=None, max_length=100)
 
 
 class WasteInfoResponse(BaseModel):
-    sido: str
-    sigungu: str = ""
-    managementArea: str | None = None
-    rules: list[DisposalRuleResponse]
+    관리번호: str
+    시도명: str
+    시군구명: str
+    관리구역명: str | None
+    관리구역대상지역명: str | None
+    배출장소유형: str | None
+    배출장소: str | None
+    재활용품배출방법: str | None
+    배출요일: str | None
+    배출시작시각: str | None
+    배출종료시각: str | None
+    데이터기준일자: str
+    오래된정보: bool
 
 
 class GuideResponse(BaseModel):
     itemName: str
     category: str
-    isRecyclable: bool
+    guideStatus: Literal["ready", "unavailable"]
+    isRecyclable: bool | None
     disposalSteps: list[str]
     tips: list[str]
     source: str
@@ -70,59 +74,17 @@ class SigunguListResponse(BaseModel):
     sigungu: list[str]
 
 
-class AreaListResponse(BaseModel):
-    sido: str
-    sigungu: str
-    areas: list[str]
-    required: bool
+class WasteRecordOption(BaseModel):
+    관리번호: str
+    관리구역명: str
+    관리구역대상지역명: str
+    배출장소유형: str
+    배출장소: str
 
 
-def load_region_data(sido: str) -> list[dict] | None:
-    path = DATA_DIR / f"{sido}.json"
-    if not path.exists() or path.parent != DATA_DIR:
-        return None
-    with open(path, encoding="utf-8") as file:
-        return json.load(file)
-
-
-def load_waste_records(sido: str, sigungu: str, management_area: str = "") -> list[dict] | None:
-    data = load_region_data(sido)
-    if data is None:
-        return None
-    if sigungu:
-        records = [row for row in data if row.get("시군구명") == sigungu]
-        if management_area:
-            records = [row for row in records if row.get("관리구역명", "").strip() == management_area]
-        return records
-    return data[:1]
-
-
-def list_management_areas(records: list[dict]) -> list[str]:
-    return sorted({row.get("관리구역명", "").strip() for row in records if row.get("관리구역명", "").strip()})
-
-
-def build_disposal_rules(records: list[dict]) -> list[dict]:
-    keys = (
-        "재활용품배출요일",
-        "재활용품배출시작시각",
-        "재활용품배출종료시각",
-        "배출장소",
-        "재활용품배출방법",
-    )
-    unique: dict[tuple[str, ...], dict] = {}
-    for row in records:
-        values = tuple(str(row.get(key, "") or "").strip() for key in keys)
-        unique.setdefault(
-            values,
-            {
-                "disposalDays": values[0],
-                "startTime": values[1],
-                "endTime": values[2],
-                "place": values[3],
-                "method": values[4],
-            },
-        )
-    return list(unique.values())
+class WasteRecordListResponse(BaseModel):
+    total: int
+    records: list[WasteRecordOption]
 
 
 def validate_image_payload(image: str) -> bytes:
@@ -153,30 +115,28 @@ def _detect_mark(image: str) -> dict:
 
 @router.get("/regions", response_model=RegionListResponse)
 async def list_regions():
-    return {"regions": sorted(path.stem for path in DATA_DIR.glob("*.json"))}
+    return {"regions": list_sido()}
 
 
 @router.get("/regions/{sido}/sigungu", response_model=SigunguListResponse)
 async def list_sigungu(sido: str):
-    data = load_region_data(sido)
-    if data is None:
+    sigungu = waste_sigungu(sido)
+    if not sigungu:
         raise HTTPException(status_code=404, detail="지원하지 않는 시·도입니다.")
-    sigungu = sorted({row.get("시군구명", "").strip() for row in data if row.get("시군구명", "").strip()})
-    return {"sido": sido, "sigungu": sigungu}
+    return {"sido": normalize_sido(sido), "sigungu": sigungu}
 
 
 @router.get(
-    "/regions/{sido}/sigungu/{sigungu}/areas",
-    response_model=AreaListResponse,
+    "/regions/{sido}/sigungu/{sigungu}/waste-records",
+    response_model=WasteRecordListResponse,
 )
-async def list_areas(sido: str, sigungu: str):
-    records = load_waste_records(sido, sigungu)
-    if records is None:
-        raise HTTPException(status_code=404, detail="지원하지 않는 시·도입니다.")
-    if not records:
-        raise HTTPException(status_code=404, detail="해당 시·군·구를 찾을 수 없습니다.")
-    areas = list_management_areas(records)
-    return {"sido": sido, "sigungu": sigungu, "areas": areas, "required": bool(areas)}
+async def list_waste_records(
+    sido: str, sigungu: str, q: str = "",
+    limit: int = Query(30, ge=1, le=50), offset: int = Query(0, ge=0),
+):
+    if not region_records(sido, sigungu):
+        raise HTTPException(status_code=404, detail="해당 시·군·구의 배출 정보가 없습니다.")
+    return search_records(sido, sigungu, q, limit, offset)
 
 
 @router.post("/analyze-image", response_model=MarkResponse)
@@ -193,35 +153,26 @@ async def analyze_image(req: ImageRequest):
 
 @router.post("/recycling-guide", response_model=GuideResponse)
 async def recycling_guide(req: GuideRequest):
-    if load_region_data(req.sido) is None:
-        raise HTTPException(status_code=404, detail="지원하지 않는 시·도입니다.")
-    sigungu_records = load_waste_records(req.sido, req.sigungu)
-    if req.sigungu and not sigungu_records:
-        raise HTTPException(status_code=404, detail="해당 시·군·구의 배출 정보를 찾을 수 없습니다.")
-    areas = list_management_areas(sigungu_records or []) if req.sigungu else []
-    if areas and not req.managementArea:
-        raise HTTPException(status_code=422, detail="관리구역을 선택해주세요.")
-    if req.managementArea and req.managementArea not in areas:
-        raise HTTPException(status_code=422, detail="지원하지 않는 관리구역입니다.")
-    waste_records = load_waste_records(req.sido, req.sigungu, req.managementArea) or []
-
     item_name = req.itemName.strip()
     if not item_name:
         raise HTTPException(status_code=422, detail="품목명을 입력해주세요.")
+    if not req.sigungu.strip():
+        raise HTTPException(status_code=422, detail="시·군·구를 선택해주세요.")
+    rows = region_records(req.sido, req.sigungu)
+    if not rows:
+        raise HTTPException(status_code=404, detail="해당 시·군·구의 배출 정보가 없습니다.")
+    if not req.managementId and len(rows) > 1:
+        raise HTTPException(status_code=409, detail="세부 관리구역 또는 배출장소를 선택해주세요.")
+    record = resolve_record(req.sido, req.sigungu, req.managementId)
+    if record is None:
+        raise HTTPException(status_code=404, detail="선택한 관리번호가 해당 지역에 없습니다.")
     try:
         # Regional schedules are rendered from structured public data, not summarized by the LLM.
         guide = get_recycling_guide(item_name, None)
         if not isinstance(guide, dict):
             raise ValueError("Invalid guide response")
-        if waste_records:
-            guide["wasteInfo"] = {
-                "sido": req.sido,
-                "sigungu": req.sigungu,
-                "managementArea": req.managementArea or None,
-                "rules": build_disposal_rules(waste_records),
-            }
-            region = " ".join(filter(None, [req.sido, req.sigungu, req.managementArea]))
-            guide["source"] = f"공공데이터 기반 지역 배출 정보 ({region})"
+        guide["wasteInfo"] = public_waste_info(record)
+        guide["source"] = "AI 생성 안내"
         return guide
     except Exception:
         logger.exception("Recycling guide generation failed")

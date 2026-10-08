@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { HistoryItem } from '../types';
-import { addHistory, deleteHistory, loadHistory } from './storage';
+import { addHistory, deleteHistory, loadHistory, normalizeResult } from './storage';
 
 const values = new Map<string, string>();
 
@@ -19,7 +19,7 @@ const historyItem: HistoryItem = {
   itemName: '페트병',
   region: '서울특별시 종로구',
   result: {
-    itemName: '페트병', category: '플라스틱', isRecyclable: true,
+    itemName: '페트병', category: '플라스틱', guideStatus: 'ready', isRecyclable: true,
     disposalSteps: ['비우기'], tips: [], source: '공공데이터',
   },
   timestamp: 1,
@@ -29,6 +29,7 @@ describe('history storage', () => {
   it('stores metadata without a base64 image', () => {
     expect(addHistory(historyItem)).toBe(true);
     expect(loadHistory()[0].image).toBeUndefined();
+    expect(loadHistory()[0].inputKind).toBe('image');
   });
 
   it('deletes a history item', () => {
@@ -64,7 +65,28 @@ describe('history storage', () => {
     };
     values.set('recycling_history', JSON.stringify([legacy]));
     const migrated = loadHistory()[0].result.wasteInfo!;
-    expect(migrated.sido).toBe('서울특별시');
-    expect(migrated.rules[0].disposalDays).toBe('월');
+    expect(migrated.시도명).toBe('서울특별시');
+    expect(migrated.배출요일).toBe('월');
+  });
+
+  it('preserves all rules in older saved regional results', () => {
+    values.set('recycling_history', JSON.stringify([{ ...historyItem, result: {
+      ...historyItem.result,
+      wasteInfo: { sido: '서울특별시', sigungu: '종로구', rules: [
+        { disposalDays: '월', startTime: '', endTime: '', place: 'A', method: '' },
+        { disposalDays: '화', startTime: '', endTime: '', place: 'B', method: '' },
+      ] },
+    } }]));
+    expect(loadHistory()[0].result.wasteInfo?.legacyRules).toHaveLength(2);
+    addHistory(historyItem);
+    expect(loadHistory()[1].result.wasteInfo?.legacyRules).toHaveLength(2);
+  });
+
+  it('marks a legacy AI fallback as unavailable', () => {
+    const oldResult = { ...historyItem.result, guideStatus: undefined, isRecyclable: false,
+      category: '확인 필요', disposalSteps: ['품목의 재질 표시와 오염 여부를 먼저 확인하세요.'] };
+    const migrated = normalizeResult(oldResult as typeof historyItem.result);
+    expect(migrated.guideStatus).toBe('unavailable');
+    expect(migrated.isRecyclable).toBeNull();
   });
 });

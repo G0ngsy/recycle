@@ -20,10 +20,39 @@ export interface DisposalRule {
 }
 
 export interface WasteInfoSimple {
+  관리번호: string;
+  시도명: string;
+  시군구명: string;
+  관리구역명: string | null;
+  관리구역대상지역명: string | null;
+  배출장소유형: string | null;
+  배출장소: string | null;
+  재활용품배출방법: string | null;
+  배출요일: string | null;
+  배출시작시각: string | null;
+  배출종료시각: string | null;
+  데이터기준일자: string;
+  오래된정보: boolean;
+  legacyRules?: DisposalRule[];
+}
+
+export interface WasteRecordOption {
+  관리번호: string;
+  관리구역명: string;
+  관리구역대상지역명: string;
+  배출장소유형: string;
+  배출장소: string;
+}
+
+export interface WasteRecordListResponse {
+  total: number;
+  records: WasteRecordOption[];
+}
+
+export interface RegionSelection {
   sido: string;
   sigungu: string;
-  managementArea?: string | null;
-  rules: DisposalRule[];
+  managementId: string;
 }
 
 export interface MarkResult {
@@ -36,7 +65,8 @@ export interface RecyclingResult {
   itemName: string;
   category: string;
   markResult?: MarkResult;
-  isRecyclable: boolean;
+  guideStatus: 'ready' | 'unavailable';
+  isRecyclable: boolean | null;
   disposalSteps: string[];
   tips: string[];
   source: string;
@@ -47,9 +77,11 @@ export interface HistoryItem {
   id: string;
   image?: string;
   searchText?: string;
+  inputKind?: 'image' | 'text';
   itemName: string;
   region: string;
   regionInfo?: { sido: string; sigungu: string; managementArea?: string };
+  regionSelection?: RegionSelection;
   result: RecyclingResult;
   timestamp: number;
 }
@@ -57,7 +89,7 @@ export interface HistoryItem {
 export interface ScanState {
   image?: string;
   searchText?: string;
-  region?: { sido: string; sigungu: string; managementArea?: string };
+  region?: RegionSelection;
   wasteInfo?: WasteInfo;
 }
 
@@ -68,11 +100,4 @@ export interface RegionListResponse {
 export interface SigunguListResponse {
   sido: string;
   sigungu: string[];
-}
-
-export interface AreaListResponse {
-  sido: string;
-  sigungu: string;
-  areas: string[];
-  required: boolean;
 }

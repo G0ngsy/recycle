@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { getManagementAreas, getRecyclingGuide, getRegions, getSigungu } from './api';
+import { getWasteRecords, getRecyclingGuide, getRegions, getSigungu } from './api';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -21,22 +21,23 @@ describe('API client', () => {
     await expect(getRegions()).rejects.toThrow('지원하지 않는 지역입니다.');
   });
 
-  it('requests management areas with encoded path segments', async () => {
+  it('requests waste records with encoded path segments', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ sido: '경기도', sigungu: '안성시', areas: [], required: false }), { status: 200 }),
+      new Response(JSON.stringify({ total: 0, records: [] }), { status: 200 }),
     );
     vi.stubGlobal('fetch', fetchMock);
-    await getManagementAreas('경기도', '안성시');
-    expect(fetchMock.mock.calls[0][0]).toContain('/sigungu/%EC%95%88%EC%84%B1%EC%8B%9C/areas');
+    await getWasteRecords('경기도', '안성시', '미양면', 30);
+    expect(fetchMock.mock.calls[0][0]).toContain('/sigungu/%EC%95%88%EC%84%B1%EC%8B%9C/waste-records');
+    expect(fetchMock.mock.calls[0][0]).toContain('offset=30');
   });
 
-  it('sends the selected management area with the guide request', async () => {
+  it('sends the selected management number with the guide request', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({}), { status: 200 }),
     );
     vi.stubGlobal('fetch', fetchMock);
-    await getRecyclingGuide('페트병', '경기도', '안성시', '미양면');
+    await getRecyclingGuide('페트병', '경기도', '안성시', '12345');
     const request = fetchMock.mock.calls[0][1] as RequestInit;
-    expect(JSON.parse(request.body as string).managementArea).toBe('미양면');
+    expect(JSON.parse(request.body as string).managementId).toBe('12345');
   });
 });

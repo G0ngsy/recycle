@@ -1,20 +1,22 @@
 from services import ai_service
 
 
-def test_string_false_is_not_treated_as_recyclable():
+def test_string_false_is_not_treated_as_a_verdict():
     result = ai_service._normalize_guide({"isRecyclable": "false"}, "컵", None)
-    assert result["isRecyclable"] is False
+    assert result["guideStatus"] == "unavailable"
+    assert result["isRecyclable"] is None
 
 
 def test_invalid_step_objects_are_replaced_with_safe_steps():
-    result = ai_service._normalize_guide({"disposalSteps": [{"invalid": True}]}, "컵", None)
-    assert all(isinstance(step, str) for step in result["disposalSteps"])
+    result = ai_service._normalize_guide({"isRecyclable": True, "disposalSteps": [{"invalid": True}]}, "컵", None)
+    assert result["disposalSteps"] == []
 
 
 def test_invalid_ai_json_returns_safe_fallback(monkeypatch):
     monkeypatch.setattr(ai_service, "_get_response", lambda prompt: "not-json")
     result = ai_service.get_recycling_guide("페트병", None)
-    assert result["isRecyclable"] is False
+    assert result["isRecyclable"] is None
+    assert result["guideStatus"] == "unavailable"
     assert result["source"] == "분리수거 AI 기본 안내"
 
 

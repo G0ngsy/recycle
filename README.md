@@ -47,9 +47,20 @@ py -3.11 -m pytest -q
 
 - `GET /api/regions`: 지원하는 시·도 목록
 - `GET /api/regions/{sido}/sigungu`: 선택한 시·도의 시·군·구 목록
-- `GET /api/regions/{sido}/sigungu/{sigungu}/areas`: 관리구역 목록과 선택 필요 여부
+- `GET /api/regions/{sido}/sigungu/{sigungu}/waste-records?q=&limit=30&offset=0`: 관리번호별 배출장소 후보
+- `POST /api/recycling-guide`: 품목명, 시·도, 시·군·구, 선택한 `managementId`로 안내 조회
 
-관리구역 데이터가 있는 시·군·구는 가이드 요청의 `managementArea`가 필수입니다. 선택한 관리구역에 서로 다른 배출 규칙이 있으면 동일 규칙만 제거하고 `wasteInfo.rules`에 모두 반환합니다. 지원하지 않는 시·도 또는 시·군·구는 다른 지역으로 대체하지 않고 `404`를 반환합니다.
+생활쓰레기 CSV 10,187건을 관리번호별로 변환한 `backend/data/waste_records.json`을 기준으로 사용합니다. 한 시·군·구에 후보가 여러 건이면 `managementId`가 필수이며, 선택한 관리번호의 규칙 한 건을 반환합니다. 일치하지 않는 지역이나 관리번호는 `404`, 선택이 필요한 경우는 `409`를 반환합니다. AI 안내를 확인할 수 없으면 `guideStatus: "unavailable"`과 `isRecyclable: null`을 반환하고 지역 정보는 유지합니다.
+
+## 지역 데이터 갱신
+
+원본 CP949 `생활쓰레기배출정보.csv`를 갱신할 때 아래 명령으로 앱용 JSON을 다시 생성합니다.
+
+```powershell
+python backend/scripts/import_waste_csv.py "C:\path\to\생활쓰레기배출정보.csv"
+```
+
+변환기는 필수 열, 행 수, 관리번호 중복, 기준일자를 검증합니다. 기존 명칭으로 저장된 시·도는 조회 시 CSV 명칭으로 매핑합니다. 오래된 시도별 JSON은 앱 조회에 사용하지 않습니다.
 
 ## OCR 통합 테스트
 
@@ -70,5 +81,5 @@ python -m pytest tests/integration/test_ocr_marks.py -m ocr -v
 - 기본 CORS 허용 대상은 `localhost:3000`과 `127.0.0.1:3000`뿐입니다.
 - EasyOCR는 CPU 모드가 기본입니다. 검증된 CUDA 환경에서만 `EASYOCR_GPU=true`를 사용하세요.
 - 이미지는 JPEG/PNG Data URL만 허용하며 기본 최대 크기는 5MB입니다.
-- Ollama/Hugging Face 호출이 실패하면 서버는 기본 분리배출 안내를 반환합니다.
+- Ollama/Hugging Face 호출이 실패하면 재활용 가능 여부를 추정하지 않고 확인 필요 상태를 반환합니다.
 - 실제 API 토큰과 데이터베이스 비밀번호는 저장소에 커밋하지 마세요.
