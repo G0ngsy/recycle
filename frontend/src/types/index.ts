@@ -59,6 +59,22 @@ export interface MarkResult {
   category: string | null;
   material: string | null;
   texts: string[];
+  ocrStatus?: 'ready' | 'error';
+  materialConflict?: boolean;
+  materialPrediction?: {
+    status: 'ready' | 'unavailable' | 'error';
+    candidates: { className: 'cardboard' | 'glass' | 'metal' | 'paper' | 'plastic' | 'trash'; label: string; score: number }[];
+    needsConfirmation: boolean;
+    experimental?: boolean;
+    modelVersion?: string | null;
+    reason?: 'low_information' | null;
+  } | null;
+}
+
+export interface GuidelineReference {
+  page: number;
+  title: string;
+  excerpt: string;
 }
 
 export interface RecyclingResult {
@@ -71,6 +87,7 @@ export interface RecyclingResult {
   tips: string[];
   source: string;
   wasteInfo?: WasteInfoSimple;
+  guidelineReferences?: GuidelineReference[];
 }
 
 export interface HistoryItem {
@@ -87,6 +104,10 @@ export interface HistoryItem {
 }
 
 export interface ScanState {
+  inputKind?: 'image' | 'text';
+  markResult?: MarkResult | null;
+  analysisComplete?: boolean;
+  itemConfirmed?: boolean;
   image?: string;
   searchText?: string;
   region?: RegionSelection;

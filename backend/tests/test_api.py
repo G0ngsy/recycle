@@ -58,7 +58,7 @@ def test_cors_does_not_allow_unknown_origin():
 
 
 def test_guide_returns_selected_record_and_owned_source(monkeypatch):
-    monkeypatch.setattr(recycling, "get_recycling_guide", lambda item_name, waste_info: {
+    monkeypatch.setattr(recycling, "get_recycling_guide", lambda item_name, waste_info, **kwargs: {
         "itemName": item_name,
         "category": "플라스틱",
         "guideStatus": "ready",
@@ -107,10 +107,16 @@ def test_image_rejects_payload_over_limit(monkeypatch):
 
 
 def test_image_returns_mark_with_detector_mock(monkeypatch):
+    from io import BytesIO
+    from PIL import Image
+
+    monkeypatch.setattr(recycling, "classify_photo", lambda photo: {"status": "unavailable", "candidates": [], "needsConfirmation": True})
     monkeypatch.setattr(recycling, "_detect_mark", lambda image: {
         "category": "페트", "material": "PET", "texts": ["PET"],
     })
-    encoded = base64.b64encode(b"test-image").decode()
+    buffer = BytesIO()
+    Image.new("RGB", (8, 8)).save(buffer, format="JPEG")
+    encoded = base64.b64encode(buffer.getvalue()).decode()
     response = client.post(
         "/api/analyze-image", json={"image": f"data:image/jpeg;base64,{encoded}"},
     )

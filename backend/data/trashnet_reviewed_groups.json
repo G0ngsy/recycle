@@ -1,0 +1,206 @@
+{
+  "reviewedAt": "2026-10-12",
+  "method": "Visual comparison of pHash/dHash candidate pairs; uniform cardboard candidates rejected as ambiguous. Same scene variants retain one representative.",
+  "groups": [
+    {
+      "files": [
+        "paper/paper305.jpg",
+        "paper/paper308.jpg"
+      ],
+      "sha256": [
+        "b66103bf16e6723e5d62672ccf8c17d644400ae07e75b2ed52d1d1b59448bcf0",
+        "48834e2abc6cd57429cf08ee8772b1af9b29b833151d953ba6167cd59a3b955b"
+      ]
+    },
+    {
+      "files": [
+        "paper/paper185.jpg",
+        "paper/paper390.jpg"
+      ],
+      "sha256": [
+        "e3e99e83241163ba255da660eefd5b1818a669992cff07418a6108f94829d766",
+        "fe4fece189ba4ea17f144ffda3b02862b0385d55787105dfa82db92f9b156b60"
+      ]
+    },
+    {
+      "files": [
+        "paper/paper459.jpg",
+        "paper/paper466.jpg"
+      ],
+      "sha256": [
+        "7bf63c244f9cf3335fd876e494f146998f671ee631010783b0a834b629ef1045",
+        "7e1e890e275f71b9f2ef857d772a764f4ae3fe911d6e5ca7049962ea1756d099"
+      ]
+    },
+    {
+      "files": [
+        "paper/paper147.jpg",
+        "paper/paper99.jpg"
+      ],
+      "sha256": [
+        "3cbe2483cf15d985ea0ea6a8857a02c576e5518c99f3d017971be0a7cafb4921",
+        "007efcae2994d06187134880fb17058f8c5c5c7d35e45266a44a22d049d05538"
+      ]
+    },
+    {
+      "files": [
+        "paper/paper522.jpg",
+        "paper/paper534.jpg"
+      ],
+      "sha256": [
+        "5351032684d61211bdf1c76561bd5374761476ab7c82d010726bb05adbe88568",
+        "c077743b69590ca7bf8aa09d02a85c3bf21aa2152a6fb9b00459d8a82d968324"
+      ]
+    },
+    {
+      "files": [
+        "paper/paper152.jpg",
+        "paper/paper392.jpg"
+      ],
+      "sha256": [
+        "7466dca69864b0394764f7bb2a236a4bbf3922331ee850bf6431901687688c23",
+        "1ed172bed03a4988589dc4ba25258b92028410f80f45af50f1412f3f1a7123ae"
+      ]
+    },
+    {
+      "files": [
+        "paper/paper246.jpg",
+        "paper/paper349.jpg"
+      ],
+      "sha256": [
+        "d604b99aa41fd0a23ac4ebdea34c676d5c6d82359b93c000d7570117946c6623",
+        "39e530519a2dbffda041f6a79fe785ecd9ebf40c2754031be487622fe1f72452"
+      ]
+    },
+    {
+      "files": [
+        "paper/paper540.jpg",
+        "paper/paper56.jpg"
+      ],
+      "sha256": [
+        "b393765c431986d9a2362be3fb341dc9863cd369ed0140fdc22519d9cf977cd1",
+        "c45152f16909519e81042f023a188a60cf197dce16a8b9ddecb34eef654e2d9a"
+      ]
+    },
+    {
+      "files": [
+        "paper/paper101.jpg",
+        "paper/paper108.jpg"
+      ],
+      "sha256": [
+        "7e39a85aaa4801fe6b3379755db707758587c94a54f4f4acd428c82511b8736e",
+        "9cda035c1ef7b29ca93c54242c153346ed007f594b8ff384daf85937479da0d6"
+      ]
+    },
+    {
+      "files": [
+        "paper/paper314.jpg",
+        "paper/paper53.jpg"
+      ],
+      "sha256": [
+        "949aae19a90245d5eba7008d7ba617a05f256f737307059c147025acfade2945",
+        "764e3796cd10971e940b02297926547addc0315af4491636c847aaed0d09eabb"
+      ]
+    },
+    {
+      "files": [
+        "paper/paper2.jpg",
+        "paper/paper40.jpg"
+      ],
+      "sha256": [
+        "b9e4866e706183e7fa4bc5590609120a8349fbc57ae2ec5f5ae6abab3b46d4b8",
+        "36b8d52e25d51650461edced41efe446aa32f9ab726752574bd2e931e8a48b7b"
+      ]
+    },
+    {
+      "files": [
+        "paper/paper345.jpg",
+        "paper/paper451.jpg"
+      ],
+      "sha256": [
+        "d64d8e80a082f47c9a2062d7c41301488bcab0825b9f09097519d41f796175c9",
+        "ecc78cc41ca38f4123667bea5cea641f5183d7aaf18ac74391cb7f8f1c5080c7"
+      ]
+    },
+    {
+      "files": [
+        "paper/paper180.jpg",
+        "paper/paper284.jpg"
+      ],
+      "sha256": [
+        "d9c13fa731cedfc357be86851e757b9954cf86998c601fbf08297211d9623c5b",
+        "4c4205c1bcf81570bce88b4842bf6b43cdd95b05da86a6bc4d0d2773c352d6e0"
+      ]
+    },
+    {
+      "files": [
+        "metal/metal120.jpg",
+        "metal/metal50.jpg"
+      ],
+      "sha256": [
+        "9b48c5e8e8b1ec2719b7154eea1a34552f0f305cb4e719528df1518bc7cff72c",
+        "56bd2853199e3fc8a9557a0b5d1bd34982aad822db6355636282c0451c16a7ff"
+      ]
+    },
+    {
+      "files": [
+        "paper/paper68.jpg",
+        "paper/paper74.jpg"
+      ],
+      "sha256": [
+        "fcd1d19e89a96e7d5c6634fbe562b2fe54c60eab87d1136d4650c52802e6d3c8",
+        "8e87b92d1b284c298738ccbc9c8ce1c7bb530655284c3a61177b3f9944b335da"
+      ]
+    },
+    {
+      "files": [
+        "paper/paper176.jpg",
+        "paper/paper549.jpg"
+      ],
+      "sha256": [
+        "5b23855e88cd46f26f3439401e22c041132f85f81484b6d5fa847ef1d4720df6",
+        "21a0356dbf84acf1257e34232c8b36239c5aab72f5ce89db0276f44cece5b702"
+      ]
+    },
+    {
+      "files": [
+        "paper/paper123.jpg",
+        "paper/paper547.jpg"
+      ],
+      "sha256": [
+        "9cf9b2074927ab8136be60b555e63ad4f3b38500be8d9720c816c5bccade851c",
+        "f0ca0fd46e2a790e8f9ae99da8b89a5dae05350c87b64dbe3d2d77e7d245e385"
+      ]
+    },
+    {
+      "files": [
+        "paper/paper135.jpg",
+        "paper/paper496.jpg"
+      ],
+      "sha256": [
+        "90c2a823e37be0f39f7c8d3a60e167e25bb86ce263b37924d5e8b367fe2afb65",
+        "7f16220484a164dea215295bb159645ad4f284114398f2184c7661d3dae41464"
+      ]
+    },
+    {
+      "files": [
+        "paper/paper474.jpg",
+        "paper/paper89.jpg"
+      ],
+      "sha256": [
+        "7fe6950911b346de88157ba5772d42fc4da6bb9c6979e155dcba79e96e1d4734",
+        "00d4cc87da1323243f156e5ff5747518156a57784bb67882ec143a551ee30fdd"
+      ]
+    },
+    {
+      "files": [
+        "paper/paper457.jpg",
+        "paper/paper553.jpg"
+      ],
+      "sha256": [
+        "cad478c68be77ac75d1d58a4dfcd8ce7ebf5fb49af029027cda70e19620e9e7a",
+        "02f4c58d7e5ed06f4b81abe50179efa39075dce3af6ee029168b74f9afb3173d"
+      ]
+    }
+  ]
+}

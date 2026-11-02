@@ -2,6 +2,27 @@ import { MarkResult, RecyclingResult, RegionListResponse, SigunguListResponse, W
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
+export class ApiError extends Error {
+  constructor(message: string, public kind: 'network' | 'timeout' | 'http' | 'response', public status?: number) { super(message); }
+}
+
+async function request<T>(url: string, options?: RequestInit): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 90000);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    if (!response.ok) throw await createApiError(response);
+    try { return await response.json() as T; }
+    catch {
+      if (controller.signal.aborted) throw new ApiError('응답이 늦어 요청을 종료했습니다. 다시 시도해주세요.', 'timeout');
+      throw new ApiError('서버 응답을 읽지 못했습니다. 다시 시도해주세요.', 'response');
+    }
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(controller.signal.aborted ? '응답이 늦어 요청을 종료했습니다. 다시 시도해주세요.' : '서버에 연결하지 못했습니다. 연결 상태를 확인하고 다시 시도해주세요.', controller.signal.aborted ? 'timeout' : 'network');
+  } finally { clearTimeout(timeout); }
+}
+
 async function createApiError(res: Response): Promise<Error> {
   let detail = '';
   try {
@@ -10,23 +31,19 @@ async function createApiError(res: Response): Promise<Error> {
   } catch {
     // Status remains available when the response has no JSON body.
   }
-  return new Error(detail || `API 오류: ${res.status}`);
+  return new ApiError(detail || '요청을 처리하지 못했습니다. 다시 시도해주세요.', 'http', res.status);
 }
 
 async function post<T>(path: string, body: object): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  return request<T>(`${BASE_URL}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw await createApiError(res);
-  return res.json();
 }
 
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`);
-  if (!res.ok) throw await createApiError(res);
-  return res.json();
+  return request<T>(`${BASE_URL}${path}`);
 }
 
 export function getRegions(): Promise<RegionListResponse> {
@@ -57,4 +74,8 @@ export function getRecyclingGuide(
   managementId: string,
 ): Promise<RecyclingResult> {
   return post<RecyclingResult>('/api/recycling-guide', { itemName, sido, sigungu, managementId });
+}
+
+export function guidelinePdfUrl(page: number): string {
+  return `${BASE_URL}/api/guideline/pdf#page=${page}`;
 }

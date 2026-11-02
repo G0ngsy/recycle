@@ -5,6 +5,7 @@ import PageHeader from '../components/ui/PageHeader';
 import Button from '../components/ui/Button';
 import { loadHistory, deleteHistory } from '../services/storage';
 import { HistoryItem } from '../types';
+import { regionLabel, savedDate } from '../services/display';
 
 export default function Gallery() {
   const navigate = useNavigate();
@@ -44,6 +45,7 @@ export default function Gallery() {
                   managementId: item.result.wasteInfo?.관리번호 || '',
                 },
                 cachedResult: item.result,
+                savedAt: item.timestamp,
               }})}
             >
             {item.image ? (
@@ -54,14 +56,15 @@ export default function Gallery() {
               </div>
             )}
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-slate-800 truncate">{item.itemName}</p>
-              <p className="text-xs text-slate-400 mt-0.5">{item.region}</p>
+              <p className="font-semibold text-slate-800 break-words">{item.itemName}</p>
+              <p className="text-sm text-slate-600 mt-0.5 break-words">{item.regionSelection ? regionLabel(item.regionSelection.sido, item.regionSelection.sigungu) : item.region.replace(/\s+없음$/, '')}</p>
+              <p className="text-xs text-slate-600 mt-1">{savedDate(item.timestamp)}</p>
               <div className="flex items-center gap-1 mt-1">
                 {item.result.guideStatus === 'unavailable'
                   ? <><CircleHelp size={14} className="text-amber-500" /><span className="text-xs text-amber-700">확인 필요</span></>
                   : item.result.isRecyclable
-                  ? <><CheckCircle size={14} className="text-emerald-500" /><span className="text-xs text-emerald-600">재활용 가능</span></>
-                  : <><XCircle size={14} className="text-red-400" /><span className="text-xs text-red-500">재활용 불가</span></>
+                  ? <><CheckCircle size={14} className="text-emerald-700" /><span className="text-xs text-emerald-800">AI 안내: 재활용 가능</span></>
+                  : <><XCircle size={14} className="text-red-600" /><span className="text-xs text-red-700">AI 안내: 재활용 불가</span></>
                 }
               </div>
             </div>

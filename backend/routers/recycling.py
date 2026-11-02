@@ -5,9 +5,13 @@ import os
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import FileResponse
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
 from services.ai_service import get_recycling_guide
+from services.material_model import classify_photo, decode_photo, has_material_conflict
+from services.guideline_data import PDF_PATH, guideline, guideline_context, search_guideline
 from services.waste_data import (
     list_sido, list_sigungu as waste_sigungu, normalize_sido,
     public_waste_info, region_records, resolve_record, search_records,
@@ -23,10 +27,28 @@ class ImageRequest(BaseModel):
     image: str
 
 
+class MaterialCandidate(BaseModel):
+    className: Literal["cardboard", "glass", "metal", "paper", "plastic", "trash"]
+    label: str
+    score: float = Field(ge=0, le=1)
+
+
+class MaterialPrediction(BaseModel):
+    status: Literal["ready", "unavailable", "error"]
+    candidates: list[MaterialCandidate] = Field(default_factory=list)
+    needsConfirmation: bool = True
+    experimental: bool = True
+    modelVersion: str | None = None
+    reason: Literal["low_information"] | None = None
+
+
 class MarkResponse(BaseModel):
     category: str | None = None
     material: str | None = None
     texts: list[str] = Field(default_factory=list)
+    ocrStatus: Literal["ready", "error"] | None = None
+    materialPrediction: MaterialPrediction | None = None
+    materialConflict: bool = False
 
 
 class GuideRequest(BaseModel):
@@ -54,6 +76,12 @@ class WasteInfoResponse(BaseModel):
     오래된정보: bool
 
 
+class GuidelineReference(BaseModel):
+    page: int
+    title: str
+    excerpt: str
+
+
 class GuideResponse(BaseModel):
     itemName: str
     category: str
@@ -63,6 +91,15 @@ class GuideResponse(BaseModel):
     tips: list[str]
     source: str
     wasteInfo: WasteInfoResponse | None = None
+    guidelineReferences: list[GuidelineReference] = Field(default_factory=list)
+
+
+class GuidelineSearchResponse(BaseModel):
+    title: str
+    publisher: str
+    published: str
+    sourceUrl: str
+    results: list[GuidelineReference]
 
 
 class RegionListResponse(BaseModel):
@@ -118,6 +155,23 @@ async def list_regions():
     return {"regions": list_sido()}
 
 
+@router.get("/guideline/search", response_model=GuidelineSearchResponse)
+async def find_guideline(q: str = Query(min_length=2, max_length=100), limit: int = Query(2, ge=1, le=5)):
+    document = guideline()
+    return {
+        "title": document["title"],
+        "publisher": document["publisher"],
+        "published": document["published"],
+        "sourceUrl": document["source_url"],
+        "results": search_guideline(q, limit),
+    }
+
+
+@router.get("/guideline/pdf")
+async def original_guideline():
+    return FileResponse(PDF_PATH, media_type="application/pdf", filename=PDF_PATH.name)
+
+
 @router.get("/regions/{sido}/sigungu", response_model=SigunguListResponse)
 async def list_sigungu(sido: str):
     sigungu = waste_sigungu(sido)
@@ -140,15 +194,23 @@ async def list_waste_records(
 
 
 @router.post("/analyze-image", response_model=MarkResponse)
-async def analyze_image(req: ImageRequest):
+def analyze_image(req: ImageRequest):
     validate_image_payload(req.image)
     try:
-        return _detect_mark(req.image)
+        photo = decode_photo(req.image)
     except ValueError:
         raise HTTPException(status_code=400, detail="이미지를 처리할 수 없습니다.") from None
+    prediction = classify_photo(photo)
+    try:
+        mark = _detect_mark(req.image)
+        mark["ocrStatus"] = "ready"
     except Exception:
-        logger.exception("Image analysis failed")
-        raise HTTPException(status_code=500, detail="이미지 분석 중 오류가 발생했습니다.") from None
+        logger.exception("OCR analysis failed")
+        mark = {"category": None, "material": None, "texts": [], "ocrStatus": "error"}
+    return {
+        **mark, "materialPrediction": prediction,
+        "materialConflict": has_material_conflict(mark.get("category"), prediction),
+    }
 
 
 @router.post("/recycling-guide", response_model=GuideResponse)
@@ -167,11 +229,15 @@ async def recycling_guide(req: GuideRequest):
     if record is None:
         raise HTTPException(status_code=404, detail="선택한 관리번호가 해당 지역에 없습니다.")
     try:
+        references = search_guideline(item_name)
         # Regional schedules are rendered from structured public data, not summarized by the LLM.
-        guide = get_recycling_guide(item_name, None)
+        guide = await run_in_threadpool(
+            get_recycling_guide, item_name, None, guideline_context=guideline_context(references),
+        )
         if not isinstance(guide, dict):
             raise ValueError("Invalid guide response")
         guide["wasteInfo"] = public_waste_info(record)
+        guide["guidelineReferences"] = references
         guide["source"] = "AI 생성 안내"
         return guide
     except Exception:

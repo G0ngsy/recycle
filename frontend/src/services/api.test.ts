@@ -1,10 +1,21 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { getWasteRecords, getRecyclingGuide, getRegions, getSigungu } from './api';
+import { ApiError, getWasteRecords, getRecyclingGuide, getRegions, getSigungu } from './api';
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe('API client', () => {
+  it('distinguishes an offline server from an HTTP rejection', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+    await expect(getRegions()).rejects.toMatchObject({ kind: 'network' });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ detail: '이미지를 처리할 수 없습니다.' }), { status: 400 })));
+    await expect(getRegions()).rejects.toBeInstanceOf(ApiError);
+    await expect(getRegions()).rejects.toMatchObject({ kind: 'http', status: 400 });
+  });
+  it('reports unreadable responses separately from network failures', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('not JSON', { status: 200 })));
+    await expect(getRegions()).rejects.toMatchObject({ kind: 'response' });
+  });
   it('URL-encodes the selected province', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ sido: '서울 특별시', sigungu: [] }), { status: 200 }),

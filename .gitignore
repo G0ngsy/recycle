@@ -22,6 +22,10 @@ backend/**/__pycache__/
 *.pyc
 backend/.env
 backend/test-results/
+backend/data/trashnet*/
+backend/models/
+backend/.cache/
+tmp/pdfs/
 
 # Editor directories and files
 .vscode/*

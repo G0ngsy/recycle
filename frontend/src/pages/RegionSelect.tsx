@@ -5,7 +5,10 @@ import { AlertCircle, ChevronRight, MapPin } from 'lucide-react';
 import Button from '../components/ui/Button';
 import PageHeader from '../components/ui/PageHeader';
 import { getRegions, getSigungu, getWasteRecords } from '../services/api';
-import type { WasteRecordOption } from '../types';
+import type { ScanState, WasteRecordOption } from '../types';
+import { saveRegion } from '../services/region';
+import { useSavedRegion } from '../services/useSavedRegion';
+import { regionLabel } from '../services/display';
 
 const PAGE_SIZE = 30;
 type RequestKind = 'regions' | 'sigungu' | 'records';
@@ -20,11 +23,14 @@ export default function RegionSelect() {
   const navigate = useNavigate();
   const location = useLocation();
   const prevState = useMemo(
-    () => (location.state as { image?: string; searchText?: string } | null) ?? {},
+    () => (location.state as (ScanState & { regionMode?: 'setup' | 'edit' }) | null) ?? {},
     [location.state],
   );
-  const [sido, setSido] = useState('');
-  const [sigungu, setSigungu] = useState('');
+  const savedRegion = useSavedRegion();
+  const settingsMode = Boolean(prevState.regionMode || (!prevState.image && !prevState.searchText));
+  const initialRegion = prevState.region ?? savedRegion?.selection;
+  const [sido, setSido] = useState(initialRegion?.sido ?? '');
+  const [sigungu, setSigungu] = useState(initialRegion?.sigungu ?? '');
   const [regions, setRegions] = useState<string[]>([]);
   const [sigunguList, setSigunguList] = useState<string[]>([]);
   const [searchText, setSearchText] = useState('');
@@ -32,7 +38,8 @@ export default function RegionSelect() {
   const [offset, setOffset] = useState(0);
   const [records, setRecords] = useState<WasteRecordOption[]>([]);
   const [total, setTotal] = useState(0);
-  const [selected, setSelected] = useState<WasteRecordOption | null>(null);
+  const [selected, setSelected] = useState<WasteRecordOption | null>(() => initialRegion?.managementId === savedRegion?.selection.managementId ? savedRegion?.record ?? null : null);
+  const [saveError, setSaveError] = useState('');
   const [loadingRegions, setLoadingRegions] = useState(true);
   const [loadingSigungu, setLoadingSigungu] = useState(false);
   const [loadingRecords, setLoadingRecords] = useState(false);
@@ -40,8 +47,8 @@ export default function RegionSelect() {
   const [retries, setRetries] = useState<Record<RequestKind, number>>({ regions: 0, sigungu: 0, records: 0 });
 
   useEffect(() => {
-    if (!prevState.image && !prevState.searchText) {
-      navigate('/', { replace: true });
+    if (!settingsMode && prevState.image && !prevState.itemConfirmed) {
+      navigate('/confirm', { replace: true, state: prevState });
       return;
     }
     let active = true;
@@ -55,7 +62,7 @@ export default function RegionSelect() {
       .catch(() => { if (active) setFailedRequest('regions'); })
       .finally(() => { if (active) setLoadingRegions(false); });
     return () => { active = false; };
-  }, [navigate, prevState.image, prevState.searchText, retries.regions]);
+  }, [navigate, prevState, settingsMode, retries.regions]);
 
   useEffect(() => {
     if (!sido) { setSigunguList([]); return; }
@@ -98,6 +105,7 @@ export default function RegionSelect() {
   }, [sido, sigungu, query, offset, searchText, retries.records]);
 
   const resetRecords = () => {
+    setSaveError('');
     setSearchText('');
     setQuery('');
     setOffset(0);
@@ -114,10 +122,23 @@ export default function RegionSelect() {
   };
 
   const isBusy = loadingRegions || loadingSigungu || loadingRecords;
+  const handleSave = () => {
+    if (!selected || isBusy || failedRequest) return;
+    const region = { sido, sigungu, managementId: selected.관리번호 };
+    if (!saveRegion({ selection: region, record: selected })) {
+      setSaveError('지역을 저장하지 못했습니다. 브라우저 저장 공간과 사이트 데이터 설정을 확인한 뒤 다시 시도해주세요.');
+      return;
+    }
+    if (settingsMode) navigate('/', { replace: true });
+    else navigate('/result', { state: { ...prevState, region } });
+  };
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="지역 선택" subtitle="시·군·구와 실제 배출 장소를 선택해주세요" />
+      <PageHeader title={settingsMode ? savedRegion ? '배출 지역 변경' : '내 배출 지역 설정' : '지역 선택'} subtitle="시·군·구와 실제 배출 장소를 선택해주세요" />
+      <p className="text-sm leading-6 text-slate-600">한 번 저장하면 다음부터 이 지역으로 안내합니다. 지역은 홈에서 언제든 변경할 수 있어요. 이 브라우저에 저장됩니다.</p>
+      {savedRegion && <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-900">현재 저장된 지역: {regionLabel(savedRegion.selection.sido, savedRegion.selection.sigungu, savedRegion.record.관리구역대상지역명)}</p>}
+      {saveError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{saveError}</p>}
 
       {failedRequest && (
         <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
@@ -156,7 +177,7 @@ export default function RegionSelect() {
             onChange={event => { setSearchText(event.target.value); setRecords([]); setSelected(null); setLoadingRecords(true); setFailedRequest(null); }}
             placeholder="지역명이나 배출장소 검색"
             className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-emerald-400" />
-          {selected && <p className="rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">선택됨: {recordLabel(selected)} · 관리번호 {selected.관리번호}</p>}
+          {selected && <p className="rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">선택됨: {recordLabel(selected)}</p>}
           {loadingRecords ? <p className="text-sm text-slate-500">배출장소를 찾는 중...</p> : (
             <>
               <p className="text-xs text-slate-500">검색 결과 {total.toLocaleString()}건</p>
@@ -164,12 +185,16 @@ export default function RegionSelect() {
               {total > 0 && (total > 1 || !!query) && (
                 <div className="max-h-72 overflow-y-auto flex flex-col gap-2" role="group" aria-label="배출장소 검색 결과">
                   {records.map(record => (
-                    <button key={record.관리번호} type="button" aria-pressed={selected?.관리번호 === record.관리번호}
+                    <div key={record.관리번호} className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+                    <button type="button" aria-pressed={selected?.관리번호 === record.관리번호}
                       onClick={() => setSelected(record)}
-                      className={`rounded-xl border px-3 py-3 text-left text-sm ${selected?.관리번호 === record.관리번호 ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-white'}`}>
-                      <span className="block text-slate-800">{recordLabel(record) || '세부 위치 정보 없음'}</span>
-                      <span className="block mt-1 text-xs text-slate-500">관리번호 {record.관리번호}</span>
+                      className={`w-full border-l-4 px-3 py-3 text-left text-sm ${selected?.관리번호 === record.관리번호 ? 'border-emerald-500 bg-emerald-50' : 'border-transparent bg-white'}`}>
+                      <span className="block font-semibold text-slate-800">{[record.관리구역명, record.관리구역대상지역명].filter(value => value && value !== '없음' && value !== '해당없음').join(' · ') || '세부 지역 정보 없음'}</span>
+                      <span className="block mt-1 text-sm text-slate-600">{[record.배출장소유형, record.배출장소].filter(value => value && value !== '없음' && value !== '해당없음').join(' · ') || '배출장소 확인 필요'}</span>
+                      {selected?.관리번호 === record.관리번호 && <span className="block mt-2 font-semibold text-emerald-800">✓ 선택한 장소</span>}
                     </button>
+                    <details className="px-3 pb-2 text-xs text-slate-600"><summary className="cursor-pointer py-2">상세 정보</summary><p>관리번호 {record.관리번호}</p></details>
+                    </div>
                   ))}
                 </div>
               )}
@@ -183,9 +208,10 @@ export default function RegionSelect() {
 
       <Button fullWidth disabled={!sido || !sigungu || !selected || isBusy || !!failedRequest}
         icon={<ChevronRight size={20} />}
-        onClick={() => navigate('/result', { state: { ...prevState, region: { sido, sigungu, managementId: selected!.관리번호 } } })}>
-        확인
+        onClick={handleSave}>
+        {settingsMode ? '이 지역 저장하기' : '지역 저장하고 배출 안내 보기'}
       </Button>
+      {settingsMode && savedRegion && <Button variant="secondary" fullWidth onClick={() => navigate('/', { replace: true })}>변경 취소</Button>}
     </div>
   );
 }

@@ -8,10 +8,10 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variants = {
-  primary: 'bg-emerald-500 text-white hover:bg-emerald-600 disabled:bg-slate-200 disabled:text-slate-400',
+  primary: 'bg-emerald-700 text-white hover:bg-emerald-800 disabled:bg-slate-200 disabled:text-slate-500',
   secondary: 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50',
   ghost: 'bg-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-50',
-  danger: 'bg-white border border-slate-200 text-red-400 hover:text-red-500 hover:bg-red-50 disabled:opacity-50',
+  danger: 'bg-white border border-slate-200 text-red-700 hover:text-red-800 hover:bg-red-50 disabled:opacity-50',
 };
 
 export default function Button({
@@ -28,7 +28,7 @@ export default function Button({
       disabled={disabled}
       className={`
         flex items-center justify-center gap-2 rounded-xl px-4 py-3 font-semibold
-        transition-colors cursor-pointer disabled:cursor-not-allowed
+        min-h-11 transition-colors cursor-pointer disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700
         ${variants[variant]}
         ${fullWidth ? 'w-full' : ''}
         ${className}

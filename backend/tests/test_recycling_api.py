@@ -2,7 +2,9 @@
 
 import sys
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Event
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -18,7 +20,7 @@ class RecyclingApiTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.client = TestClient(app)
-        cls.fake_ai = staticmethod(lambda item, info: {
+        cls.fake_ai = staticmethod(lambda item, info, **kwargs: {
             "itemName": item, "category": "테스트", "guideStatus": "ready", "isRecyclable": True,
             "disposalSteps": [], "tips": [], "source": "테스트",
         })
@@ -74,6 +76,30 @@ class RecyclingApiTests(unittest.TestCase):
             })
         self.assertEqual(result.status_code, 200)
         self.assertEqual(result.json()["wasteInfo"]["관리번호"], dataset()[1][key][0]["관리번호"])
+
+    def test_health_remains_responsive_during_guide_generation(self):
+        key = next(key for key, rows in dataset()[1].items() if len(rows) == 1)
+        started, release = Event(), Event()
+
+        def slow_guide(item, info, **kwargs):
+            started.set()
+            if not release.wait(10):
+                raise TimeoutError("Test guide was not released")
+            return self.fake_ai(item, info, **kwargs)
+
+        with patch("routers.recycling.get_recycling_guide", slow_guide):
+            with TestClient(app) as client, ThreadPoolExecutor(max_workers=2) as pool:
+                pending = pool.submit(client.post, "/api/recycling-guide", json={
+                    "itemName": "유리병", "sido": key[0], "sigungu": key[1],
+                })
+                try:
+                    self.assertTrue(started.wait(5))
+                    health = pool.submit(client.get, "/health").result(timeout=3)
+                    self.assertEqual(health.status_code, 200)
+                    self.assertFalse(pending.done())
+                finally:
+                    release.set()
+                self.assertEqual(pending.result(timeout=5).status_code, 200)
 
 
 if __name__ == "__main__":
